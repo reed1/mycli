@@ -13,10 +13,10 @@ def list_databases(cur, arg=None, **_):
     qr_cols = ', '.join([f'r.{x}' for x in cols])
     query = f"""
     with recursive cte as (
-        select {q_cols}, 1 as depth from renjakl where id = {row_id}
+        select {q_cols}, 1 as depth from {table} where id = {row_id}
         union all
-        select {qr_cols}, cte.depth + 1 from renjakl as r
-        inner join cte on r.id = cte.parent_id
+        select {qr_cols}, cte.depth + 1 from {table} as t
+        inner join cte on t.id = cte.parent_id
     )
     select {q_cols} from cte {' '.join(args)} order by depth desc
     """
@@ -36,7 +36,7 @@ def list_databases(cur, arg=None, **_):
     q_cols = ', '.join(cols)
     query = f"""
     select * from (
-        select {q_cols} from renjakl where parent_id = {row_id}
+        select {q_cols} from {table} where parent_id = {row_id}
     ) as t
     {' '.join(args)}
     """
