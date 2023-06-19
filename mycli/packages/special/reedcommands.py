@@ -6,7 +6,7 @@ log = logging.getLogger(__name__)
 
 
 @special_command('\\du', '\\du [table] [id]', 'Drill up row', arg_type=PARSED_QUERY, case_sensitive=True)
-def list_databases(cur, arg=None, **_):
+def drill_up(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r'\s+', arg)
     cols = find_useful_columns(cur, table)
     q_cols = ', '.join(cols)
@@ -30,7 +30,7 @@ def list_databases(cur, arg=None, **_):
 
 
 @special_command('\\dd', '\\dd [table] [id]', 'Drill down row', arg_type=PARSED_QUERY, case_sensitive=True)
-def list_databases(cur, arg=None, **_):
+def drill_down(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r'\s+', arg)
     cols = find_useful_columns(cur, table)
     q_cols = ', '.join(cols)
