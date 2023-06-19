@@ -16,7 +16,7 @@ def drill_up(cur, arg=None, **_):
         select {q_cols}, 1 as depth from {table} where id = {row_id}
         union all
         select {qc_cols}, cte.depth + 1 from {table} as c
-        inner join cte on t.id = cte.parent_id
+        inner join cte on c.id = cte.parent_id
     )
     select {q_cols} from cte {' '.join(args)} order by depth desc
     """
