@@ -10,7 +10,7 @@ def drill_up(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r'\s+', arg)
     cols = find_useful_columns(cur, table)
     q_cols = ', '.join(cols)
-    qc_cols = ', '.join([f'r.{x}' for x in cols])
+    qc_cols = ', '.join([f'c.{x}' for x in cols])
     query = f"""
     with recursive cte as (
         select {q_cols}, 1 as depth from {table} where id = {row_id}
