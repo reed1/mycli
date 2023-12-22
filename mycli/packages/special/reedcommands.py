@@ -49,8 +49,45 @@ def drill_down(cur, arg=None, **_):
         return [(None, None, None, '')]
 
 
+@special_command('\\tree', '\\tree [table]', 'Show tree for a table', arg_type=PARSED_QUERY, case_sensitive=True)
+def tree(cur, arg=None, **_):
+    [table, *args] = re.split(r'\s+', arg)
+    query = f"""
+        with recursive cte as (
+            select id, parent_id,
+            cast(level as binary) as level_full,
+            level, 0 as depth
+            from {table}
+            where parent_id = 0
+            union all
+            select t.id, t.parent_id,
+            concat(cte.level_full, '-', t.level) as level_full,
+            t.level, cte.depth + 1
+            from {table} t
+            inner join cte on t.parent_id = cte.id
+        )
+        select
+            depth,
+            concat(
+                repeat('*', depth),
+                case when depth > 0 then ' ' else '' end,
+                level) as level,
+            count(*) as cnt
+        from cte
+        group by depth, level
+        order by min(level_full)
+    """
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, '')]
+    else:
+        return [(None, None, None, '')]
+
+
 def find_useful_columns(cur, table):
-    query = f'SHOW FIELDS FROM {table}'
+    query = f'show fields from {table}'
     log.debug(query)
     cur.execute(query)
     columns = [x[0] for x in cur.fetchall()]
