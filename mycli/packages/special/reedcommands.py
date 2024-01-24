@@ -33,12 +33,16 @@ def drill_up(cur, arg=None, **_):
 def drill_down(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r'\s+', arg)
     cols = find_useful_columns(cur, table)
+    extra = ' '.join(args)
+    q_where = '(1=1)'
+    if extra.startswith('where '):
+        q_where = extra[6:]
     q_cols = ', '.join(cols)
     query = f"""
-    select * from (
-        select {q_cols} from {table} where parent_id = {row_id}
-    ) as t
-    {' '.join(args)}
+    select {q_cols}
+    from {table}
+    where parent_id = {row_id} and
+        ({q_where})
     """
     log.debug(query)
     cur.execute(query)
