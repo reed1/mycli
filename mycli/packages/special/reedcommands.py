@@ -89,7 +89,7 @@ def drill_down_kode(cur, arg=None, **_):
         ])}
     ),
     t as (
-        select {', '.join(cols)}, 0 as depth, cast(kode as as char(255)) as kode_full
+        select {', '.join(cols)}, 0 as depth, cast(kode as char(255)) as kode_full
         from t_source
         where
             parent_id = 0 and
