@@ -4,6 +4,24 @@ from .main import special_command, PARSED_QUERY
 
 log = logging.getLogger(__name__)
 
+@special_command(
+    "\\do",
+    "\\do [table] [id]",
+    "Get one row",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def drill_one(cur, arg=None, **_):
+    [table, row_id, *args] = re.split(r"\s+", arg)
+    query = f"select * from {table} where id = {row_id}"
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
 
 @special_command(
     "\\du",
