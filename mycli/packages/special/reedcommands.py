@@ -5,6 +5,25 @@ from .main import special_command, PARSED_QUERY
 log = logging.getLogger(__name__)
 
 @special_command(
+    "\\d",
+    "\\d [table]",
+    "Describe table",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def describe(cur, arg=None, **_):
+    [table, *args] = re.split(r"\s+", arg)
+    query = f"show create table {table}"
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
+@special_command(
     "\\do",
     "\\do [table] [id]",
     "Get one row",
