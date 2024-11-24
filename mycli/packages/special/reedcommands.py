@@ -152,20 +152,25 @@ def drill_down_kode(cur, arg=None, **_):
 
 @special_command(
     "\\tree",
-    "\\tree [table]",
+    "\\tree [table] [root_id]",
     "Show tree for a table",
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
 def tree(cur, arg=None, **_):
     [table, *args] = re.split(r"\s+", arg)
+    if len(args) == 0:
+        where = "(parent_id = 0)"
+    else:
+        root_id = int(args[0])
+        where = f"(id = {root_id})"
     query = f"""
         with recursive cte as (
             select id, parent_id,
             cast(level as binary) as level_full,
             level, 0 as depth
             from {table}
-            where parent_id = 0
+            where {where}
             union all
             select t.id, t.parent_id,
             concat(cte.level_full, '-', t.level) as level_full,
