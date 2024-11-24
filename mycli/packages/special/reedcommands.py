@@ -126,7 +126,7 @@ def drill_down_recursive(cur, arg=None, **_):
         inner join cte on c.parent_id = cte.id
         where {q_where}
     )
-    select {q_cols} from cte order by depth, id
+    select depth, {q_cols} from cte order by depth, id
     """
     log.debug(query)
     cur.execute(query)
