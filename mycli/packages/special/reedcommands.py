@@ -119,7 +119,7 @@ def drill_down_recursive(cur, arg=None, **_):
     q_cols = ", ".join(cols)
     query = f"""
     with recursive cte as (
-        select {q_cols}, 1 as depth from {table} where id = {row_id}
+        select {q_cols}, 0 as depth from {table} where id = {row_id}
         union all
         select {', '.join([f"c.{col}" for col in cols])}, cte.depth + 1
         from {table} as c
