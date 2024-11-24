@@ -103,6 +103,41 @@ def drill_down(cur, arg=None, **_):
 
 
 @special_command(
+    "\\ddr",
+    "\\ddr [table] [id]",
+    "Drill down row recursively",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def drill_down_recursive(cur, arg=None, **_):
+    [table, row_id, *args] = re.split(r"\s+", arg)
+    cols = find_useful_columns(cur, table)
+    extra = " ".join(args)
+    q_where = "(1=1)"
+    if extra.startswith("where "):
+        q_where = extra[6:]
+    q_cols = ", ".join(cols)
+    query = f"""
+    with recursive cte as (
+        select {q_cols}, 1 as depth from {table} where id = {row_id}
+        union all
+        select {', '.join([f"c.{col}" for col in cols])}, cte.depth + 1
+        from {table} as c
+        inner join cte on c.parent_id = cte.id
+        where {q_where}
+    )
+    select {q_cols} from cte order by depth, id
+    """
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
+@special_command(
     "\\dk",
     "\\dk [table] [kode]",
     "Drill down kode",
