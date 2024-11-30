@@ -31,8 +31,12 @@ def describe(cur, arg=None, **_):
     case_sensitive=True,
 )
 def drill_one(cur, arg=None, **_):
-    [table, row_id, *args] = re.split(r"\s+", arg)
-    query = f"select * from {table} where id = {row_id}"
+    [table, *args] = re.split(r"\s+", arg)
+    if len(args) == 0:
+        query = f"select * from {table} limit 100"
+    elif len(args) == 1:
+        row_id = int(args[0])
+        query = f"select * from {table} where id = {row_id}"
     log.debug(query)
     cur.execute(query)
     if cur.description:
