@@ -246,11 +246,11 @@ def tree(cur, arg=None, **_):
 )
 def get_columns(cur, arg=None, **_):
     table = re.split(r"\s+", arg)[0]
-    q_where_schema = '(1=1)'
+    q_where_schema = '(table_schema = database())'
     if '.' in table:
         schema = table.split('.')[0]
         table = table.split('.')[-1]
-        q_where_schema = f"table_schema = '{schema}'"
+        q_where_schema = f"(table_schema = '{schema}')"
     query = f"""
     select
         column_name as name,
