@@ -237,6 +237,37 @@ def tree(cur, arg=None, **_):
         return [(None, None, None, "")]
 
 
+@special_command(
+    "\\gcol",
+    "\\gcol <table>",
+    "Get columns",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def get_columns(cur, arg=None, **_):
+    table = re.split(r"\s+", arg)[0]
+    q_where_schema = '(1=1)'
+    if '.' in table:
+        schema = table.split('.')[0]
+        table = table.split('.')[-1]
+        q_where_schema = f"table_schema = '{schema}'"
+    query = f"""
+    select
+        column_name as name,
+        data_type as type
+    from information_schema.columns
+    where table_name = '{table}' and {q_where_schema}
+    order by ordinal_position
+    """
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
 def find_useful_columns(cur, table):
     query = f"show fields from {table}"
     log.debug(query)
