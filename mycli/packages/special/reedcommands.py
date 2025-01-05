@@ -268,6 +268,28 @@ def get_columns(cur, arg=None, **_):
         return [(None, None, None, "")]
 
 
+@special_command(
+    "\\dc",
+    "\\dc [table] [columns]",
+    "Get distinct count of columns",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def get_distinct_count(cur, arg=None, **_):
+    if not re.match(r"^\w+(\s+\"?\w+\"?)+$", arg):
+        raise ValueError(r"Invalid pattern. Should be \\dc table [columns]..")
+    [table, *columns] = re.split(r'\s+', arg)
+    cols = ', '.join(columns)
+    query = f'select {cols}, count(*) as cnt from {table} group by {cols} order by {cols}'
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
 def find_useful_columns(cur, table):
     query = f"show fields from {table}"
     log.debug(query)
