@@ -3,6 +3,8 @@ from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.filters import completion_is_selected, emacs_mode
 from prompt_toolkit.key_binding import KeyBindings
 
+from .reed_key_bindings import add_custom_key_bindings
+
 _logger = logging.getLogger(__name__)
 
 
@@ -125,5 +127,7 @@ def mycli_bindings(mycli):
             event.app.current_buffer.validate_and_handle()
         else:
             event.app.current_buffer.insert_text('\n')
+
+    add_custom_key_bindings(kb, mycli)
 
     return kb

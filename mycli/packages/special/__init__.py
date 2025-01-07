@@ -8,4 +8,4 @@ def export(defn):
 
 from . import dbcommands
 from . import iocommands
-from . import reedcommands
+from . import reed_dbcommands

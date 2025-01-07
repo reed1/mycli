@@ -1,0 +1,53 @@
+import logging
+import subprocess
+
+_logger = logging.getLogger(__name__)
+
+
+def add_custom_key_bindings(kb, mycli):
+
+    @kb.add("c-e")
+    def _(event):
+        """Edit the current input in external editor."""
+        _logger.debug("Detected <C-e> key.")
+        buff = event.app.current_buffer
+        buff.insert_text("\\e")
+        buff.validate_and_handle()
+
+    @kb.add("c-b")
+    def _(event):
+        """Select active schema"""
+        _logger.debug("Detected <C-b> key.")
+        query = "SELECT schema_name FROM information_schema.schemata"
+        [[_,cur,_,_]] = mycli.sqlexecute.run(query)
+        schemas = [row[0] for row in cur.fetchall()]
+        filtereds = sorted([e for e in schemas if  e != "information_schema"])
+        sorteds = custom_sort_schemas(filtereds)
+        schema = subprocess.run(
+            ["rofi", "-dmenu", "-p", "Select schema:"],
+            input="\n".join(sorteds),
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        if not schema:
+            return
+        buff = event.app.current_buffer
+        buff.text = f'use {schema};'
+        buff.validate_and_handle()
+
+def custom_sort_schemas(schemas):
+    def custom_sort_key(s):
+        """
+        Sorts alphabetically (a-z) for letters and numerically (9-0) for numbers,
+        So that recent database year comes first.
+        """
+        parts = list(s)
+        res = []
+        for part in parts:
+            if part.isdigit():
+                # reverse the order of digits
+                res.append({str(x): str(9 - x) for x in range(10)}[part])
+            else:
+                res.append(part)
+        return ''.join(res)
+    return sorted(schemas, key=custom_sort_key)

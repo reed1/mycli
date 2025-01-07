@@ -1,5 +1,6 @@
 import logging
 import re
+
 from .main import special_command, PARSED_QUERY
 
 log = logging.getLogger(__name__)
@@ -288,6 +289,27 @@ def get_distinct_count(cur, arg=None, **_):
         return [(None, cur, headers, "")]
     else:
         return [(None, None, None, "")]
+
+@special_command(
+    "\\ss",
+    "\\ss[+] [schema]",
+    "Select schema",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def select_schema(cur, arg=None, arg_type=PARSED_QUERY, verbose=False):
+    schema = arg
+    if not schema:
+        query = "SELECT schema_name FROM information_schema.schemata"
+        log.debug(query)
+        cur.execute(query)
+    if schema:
+        query = f"use {schema}"
+        log.debug(query)
+        cur.execute(query)
+        return [(None, None, None, None)]
+    else:
+        return [(None, None, None, None)]
 
 
 def find_useful_columns(cur, table):
