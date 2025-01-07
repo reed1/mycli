@@ -39,7 +39,7 @@ def custom_sort_schemas(schemas):
     def custom_sort_key(s):
         """
         Sorts alphabetically (a-z) for letters and numerically (9-0) for numbers,
-        So that recent database year comes first.
+        So that recent schema year comes first.
         """
         parts = list(s)
         res = []
