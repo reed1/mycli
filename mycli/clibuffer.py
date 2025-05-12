@@ -1,7 +1,8 @@
+from prompt_toolkit.application import get_app
 from prompt_toolkit.enums import DEFAULT_BUFFER
 from prompt_toolkit.filters import Condition
-from prompt_toolkit.application import get_app
-from .packages import special
+
+from mycli.packages import special
 
 
 def cli_is_multiline(mycli):
@@ -13,6 +14,7 @@ def cli_is_multiline(mycli):
             return False
         else:
             return not _multiline_exception(doc.text)
+
     return cond
 
 
@@ -23,33 +25,34 @@ def _multiline_exception(text):
     # Multi-statement favorite query is a special case. Because there will
     # be a semicolon separating statements, we can't consider semicolon an
     # EOL. Let's consider an empty line an EOL instead.
-    if text.startswith('\\fs'):
-        return orig.endswith('\n')
+    if text.startswith("\\fs"):
+        return orig.endswith("\n")
 
     return (
         # Special Command
-        text.startswith('\\') or
-
+        text.startswith("\\")
+        or
         # Delimiter declaration
-        text.lower().startswith('delimiter') or
-
+        text.lower().startswith("delimiter")
+        or
         # Ended with the current delimiter (usually a semi-column)
-        text.endswith(special.get_current_delimiter()) or
-
-        text.endswith('\\g') or
-        text.endswith('\\G') or
-        text.endswith(r'\e') or
-        text.endswith(r'\clip') or
-
+        text.endswith((
+            special.get_current_delimiter(),
+            "\\g",
+            "\\G",
+            r"\e",
+            r"\clip",
+        ))
+        or
         # Exit doesn't need semi-column`
-        (text == 'exit') or
-
+        (text == "exit")
+        or
         # Quit doesn't need semi-column
-        (text == 'quit') or
-
+        (text == "quit")
+        or
         # To all teh vim fans out there
-        (text == ':q') or
-
+        (text == ":q")
+        or
         # just a plain enter without any text
-        (text == '')
+        (text == "")
     )

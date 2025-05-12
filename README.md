@@ -1,8 +1,6 @@
 # mycli
 
 [![Build Status](https://github.com/dbcli/mycli/workflows/mycli/badge.svg)](https://github.com/dbcli/mycli/actions?query=workflow%3Amycli)
-[![PyPI](https://img.shields.io/pypi/v/mycli.svg)](https://pypi.python.org/pypi/mycli)
-[![LGTM](https://img.shields.io/lgtm/grade/python/github/dbcli/mycli.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/dbcli/mycli/context:python)
 
 A command line client for MySQL that can do auto-completion and syntax highlighting.
 
@@ -76,6 +74,9 @@ $ sudo apt-get install mycli # Only on debian or ubuntu
       --ssl-cert PATH               X509 cert in PEM format.
       --ssl-key PATH                X509 key in PEM format.
       --ssl-cipher TEXT             SSL cipher to use.
+      --tls-version [TLSv1|TLSv1.1|TLSv1.2|TLSv1.3]
+                                    TLS protocol version for secure connection.
+
       --ssl-verify-server-cert      Verify server's "Common Name" in its cert
                                     against hostname used when connecting. This
                                     option is disabled by default.
@@ -146,13 +147,10 @@ get this running in a development setup.
 
 https://github.com/dbcli/mycli/blob/main/CONTRIBUTING.md
 
-Please feel free to reach out to me if you need help.
 
-My email: amjith.r@gmail.com
+## Additional Install Instructions:
 
-Twitter: [@amjithr](http://twitter.com/amjithr)
-
-## Detailed Install Instructions:
+These are some alternative ways to install mycli that are not managed by our team but provided by OS package maintainers. These packages could be slightly out of date and take time to release the latest version. 
 
 ### Arch, Manjaro
 
@@ -178,29 +176,10 @@ Fedora has a package available for mycli, install it using dnf:
 $ sudo dnf install mycli
 ```
 
-### RHEL, Centos
-
-I haven't built an RPM package for mycli for RHEL or Centos yet. So please use `pip` to install `mycli`. You can install pip on your system using:
-
-```
-$ sudo yum install python3-pip
-```
-
-Once that is installed, you can install mycli as follows:
-
-```
-$ sudo pip3 install mycli
-```
-
 ### Windows
 
-Follow the instructions on this blogpost: https://www.codewall.co.uk/installing-using-mycli-on-windows/
+Follow the instructions on this blogpost: http://web.archive.org/web/20221006045208/https://www.codewall.co.uk/installing-using-mycli-on-windows/
 
-### Cygwin
-
-1. Make sure the following Cygwin packages are installed:
-`python3`, `python3-pip`.
-2. Install mycli: `pip3 install mycli`
 
 ### Thanks:
 
@@ -220,7 +199,7 @@ Thanks to [PyMysql](https://github.com/PyMySQL/PyMySQL) for a pure python adapte
 
 ### Compatibility
 
-Mycli is tested on macOS and Linux, and requires Python 3.7 or better.
+Mycli is tested on macOS and Linux, and requires Python 3.9 or better.
 
 **Mycli is not tested on Windows**, but the libraries used in this app are Windows-compatible.
 This means it should work without any modifications. If you're unable to run it

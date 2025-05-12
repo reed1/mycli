@@ -1,0 +1,101 @@
+[project]
+name = "mycli"
+dynamic = ["version"]
+description = "CLI for MySQL Database. With auto-completion and syntax highlighting."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "BSD" }
+authors = [{ name = "Mycli Core Team", email = "mycli-dev@googlegroups.com" }]
+urls = { homepage = "http://mycli.net" }
+
+dependencies = [
+    "click >= 7.0,<8.1.8",
+    "cryptography >= 1.0.0",
+    "Pygments>=1.6",
+    "prompt_toolkit>=3.0.6,<4.0.0",
+    "PyMySQL >= 0.9.2",
+    "sqlparse>=0.3.0,<0.6.0",
+    "sqlglot[rs] == 26.*",
+    "configobj >= 5.0.5",
+    "cli_helpers[styles] >= 2.2.1",
+    "pyperclip >= 1.8.1",
+    "pyaes >= 1.6.1",
+    "pyfzf >= 0.3.1",
+    "importlib_resources >= 5.0.0; python_version<'3.9'",
+]
+
+[build-system]
+requires = [
+    "setuptools>=64.0",
+    "setuptools-scm>=8;python_version>='3.8'",
+    "setuptools-scm<8;python_version<'3.8'",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+
+[project.optional-dependencies]
+ssh = ["paramiko", "sshtunnel"]
+dev = [
+    "behave>=1.2.6",
+    "coverage>=7.2.7",
+    "pexpect>=4.9.0",
+    "pytest>=7.4.4",
+    "pytest-cov>=4.1.0",
+    "tox>=4.8.0",
+    "pdbpp>=0.10.3",
+]
+
+[project.scripts]
+mycli = "mycli.main:cli"
+
+[tool.setuptools.package-data]
+mycli = ["myclirc", "AUTHORS", "SPONSORS"]
+
+[tool.setuptools.packages.find]
+include = ["mycli*"]
+
+[tool.ruff]
+target-version = 'py39'
+line-length = 140
+
+[tool.ruff.lint]
+select = [
+    'A',
+    'I',
+    'E',
+    'W',
+    'F',
+    'C4',
+    'PIE',
+    'TID',
+]
+ignore = [
+    'E401',   # Multiple imports on one line
+    'E402',   # Module level import not at top of file
+    'PIE808', # range() starting with 0
+    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    'E111',   # indentation-with-invalid-multiple
+    'E114',   # indentation-with-invalid-multiple-comment
+    'E117',   # over-indented
+    'W191',   # tab-indentation
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = [
+    'mycli',
+    'test',
+    'steps',
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = 'all'
+
+[tool.ruff.format]
+preview = true
+quote-style = 'preserve'
+exclude = [
+    'build',
+    'mycli_dev',
+]

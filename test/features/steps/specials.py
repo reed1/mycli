@@ -5,14 +5,14 @@ to call the step in "*.feature" file.
 
 """
 
+from behave import then, when
 import wrappers
-from behave import when, then
 
 
-@when('we refresh completions')
+@when("we refresh completions")
 def step_refresh_completions(context):
     """Send refresh command."""
-    context.cli.sendline('rehash')
+    context.cli.sendline("rehash")
 
 
 @then('we see text "{text}"')
@@ -20,8 +20,8 @@ def step_see_text(context, text):
     """Wait to see given text message."""
     wrappers.expect_exact(context, text, timeout=2)
 
-@then('we see completions refresh started')
+
+@then("we see completions refresh started")
 def step_see_refresh_started(context):
     """Wait to see refresh output."""
-    wrappers.expect_exact(
-        context, 'Auto-completion refresh started in the background.', timeout=2)
+    wrappers.expect_exact(context, "Auto-completion refresh started in the background.", timeout=2)

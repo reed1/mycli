@@ -12,16 +12,19 @@ class Paramiko:
     def __getattr__(self, name):
         import sys
         from textwrap import dedent
-        print(dedent("""
-            To enable certain SSH features you need to install paramiko:
-            
-               pip install paramiko
-               
+
+        print(
+            dedent("""
+            To enable certain SSH features you need to install paramiko and sshtunnel:
+
+               pip install paramiko sshtunnel
+
             It is required for the following configuration options:
                 --list-ssh-config
                 --ssh-config-host
                 --ssh-host
-        """))
+        """)
+        )
         sys.exit(1)
 
 

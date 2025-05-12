@@ -1,10 +1,11 @@
 import re
+
 import sqlparse
 
 
 class DelimiterCommand(object):
     def __init__(self):
-        self._delimiter = ';'
+        self._delimiter = ";"
 
     def _split(self, sql):
         """Temporary workaround until sqlparse.split() learns about custom
@@ -12,27 +13,24 @@ class DelimiterCommand(object):
 
         placeholder = "\ufffc"  # unicode object replacement character
 
-        if self._delimiter == ';':
+        if self._delimiter == ";":
             return sqlparse.split(sql)
 
         # We must find a string that original sql does not contain.
         # Most likely, our placeholder is enough, but if not, keep looking
         while placeholder in sql:
             placeholder += placeholder[0]
-        sql = sql.replace(';', placeholder)
-        sql = sql.replace(self._delimiter, ';')
+        sql = sql.replace(";", placeholder)
+        sql = sql.replace(self._delimiter, ";")
 
         split = sqlparse.split(sql)
 
-        return [
-            stmt.replace(';', self._delimiter).replace(placeholder, ';')
-            for stmt in split
-        ]
+        return [stmt.replace(";", self._delimiter).replace(placeholder, ";") for stmt in split]
 
-    def queries_iter(self, input):
+    def queries_iter(self, input_str):
         """Iterate over queries in the input string."""
 
-        queries = self._split(input)
+        queries = self._split(input_str)
         while queries:
             for sql in queries:
                 delimiter = self._delimiter
@@ -49,7 +47,7 @@ class DelimiterCommand(object):
                 # re-split everything, and if we previously stripped
                 # the delimiter, append it to the end
                 if self._delimiter != delimiter:
-                    combined_statement = ' '.join([sql] + queries)
+                    combined_statement = " ".join([sql] + queries)
                     if trailing_delimiter:
                         combined_statement += delimiter
                     queries = self._split(combined_statement)[1:]
@@ -63,13 +61,13 @@ class DelimiterCommand(object):
         word of it.
 
         """
-        match = arg and re.search(r'[^\s]+', arg)
+        match = arg and re.search(r"[^\s]+", arg)
         if not match:
-            message = 'Missing required argument, delimiter'
+            message = "Missing required argument, delimiter"
             return [(None, None, None, message)]
 
         delimiter = match.group()
-        if delimiter.lower() == 'delimiter':
+        if delimiter.lower() == "delimiter":
             return [(None, None, None, 'Invalid delimiter "delimiter"')]
 
         self._delimiter = delimiter

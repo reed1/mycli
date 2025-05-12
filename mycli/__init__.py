@@ -1,1 +1,3 @@
-__version__ = '1.26.1'
+import importlib.metadata
+
+__version__ = importlib.metadata.version("mycli")
