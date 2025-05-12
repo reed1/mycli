@@ -7,6 +7,7 @@ from pymysql.constants import FIELD_TYPE
 from pymysql.converters import conversions, convert_date, convert_datetime, convert_timedelta, decoders
 
 from mycli.packages import special
+from mycli import connection_keepalive
 
 try:
     import paramiko  # noqa: F401
