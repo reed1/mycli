@@ -12,7 +12,7 @@ state = {
 def keepalive(conn: pymysql.connections.Connection):
     state["connection"] = conn
     if state["thread"] is None:
-        state["thread"] = threading.Thread(target=keepalive_thread)
+        state["thread"] = threading.Thread(target=keepalive_thread, daemon=True)
         state["thread"].start()
 
 

@@ -134,4 +134,6 @@ def mycli_bindings(mycli):
         else:
             event.app.current_buffer.insert_text("\n")
 
+    add_custom_key_bindings(kb, mycli)
+
     return kb
