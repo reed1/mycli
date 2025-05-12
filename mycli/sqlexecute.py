@@ -13,6 +13,8 @@ try:
 except ImportError:
     from mycli.packages.paramiko_stub import paramiko
 
+import connection_keepalive
+
 _logger = logging.getLogger(__name__)
 
 FIELD_TYPES = decoders.copy()
@@ -198,6 +200,9 @@ class SQLExecute(object):
                 ('0.0.0.0', 0),
             )
             conn.connect(chan)
+
+        # Start keepalive thread
+        connection_keepalive.keepalive(conn)
 
         if hasattr(self, 'conn'):
             self.conn.close()
