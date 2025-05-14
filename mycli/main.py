@@ -15,7 +15,7 @@ from datetime import datetime
 from importlib import resources
 import itertools
 from random import choice
-from time import time
+from time import time, sleep
 from urllib.parse import unquote, urlparse
 
 from cli_helpers.tabular_output import TabularOutputFormatter, preprocessors
@@ -659,6 +659,9 @@ class MyCli(object):
         def one_iteration(text=None):
             if text is None:
                 try:
+                    if iterations == 0:
+                        # Workaround for cursor position requests (CPR) not working on initial prompt
+                        sleep(1)
                     text = self.prompt_app.prompt()
                 except KeyboardInterrupt:
                     return
@@ -1372,7 +1375,6 @@ def cli(
             sys.exit(1)
 
     if sys.stdin.isatty():
-        os.system("clear")
         mycli.run_cli()
     else:
         stdin = click.get_text_stream("stdin")
