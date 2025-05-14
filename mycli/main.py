@@ -1372,6 +1372,7 @@ def cli(
             sys.exit(1)
 
     if sys.stdin.isatty():
+        os.system("clear")
         mycli.run_cli()
     else:
         stdin = click.get_text_stream("stdin")
