@@ -1,3 +1,4 @@
+import os
 import logging
 import subprocess
 
@@ -31,6 +32,7 @@ def add_custom_key_bindings(kb, mycli):
         ).stdout.strip()
         if not schema:
             return
+        persists_last_schema(schema)
         buff = event.app.current_buffer
         buff.text = f'use {schema};'
         buff.validate_and_handle()
@@ -51,3 +53,10 @@ def custom_sort_schemas(schemas):
                 res.append(part)
         return ''.join(res)
     return sorted(schemas, key=custom_sort_key)
+
+
+def persists_last_schema(schema_name: str):
+    dbconfig_id = os.environ.get("DBCONFIG_ID")
+    fcache = os.path.expanduser(f"~/.cache/rlocal/db/{dbconfig_id}.last_schema")
+    with open(fcache, "w") as f:
+        f.write(schema_name)
