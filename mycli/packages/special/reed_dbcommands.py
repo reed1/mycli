@@ -1,9 +1,11 @@
 import logging
 import re
+import subprocess
 
 from .main import special_command, PARSED_QUERY
 
 log = logging.getLogger(__name__)
+
 
 @special_command(
     "\\d",
@@ -247,10 +249,10 @@ def tree(cur, arg=None, **_):
 )
 def get_columns(cur, arg=None, **_):
     table = re.split(r"\s+", arg)[0]
-    q_where_schema = '(table_schema = database())'
-    if '.' in table:
-        schema = table.split('.')[0]
-        table = table.split('.')[-1]
+    q_where_schema = "(table_schema = database())"
+    if "." in table:
+        schema = table.split(".")[0]
+        table = table.split(".")[-1]
         q_where_schema = f"(table_schema = '{schema}')"
     query = f"""
     select
@@ -279,9 +281,11 @@ def get_columns(cur, arg=None, **_):
 def get_distinct_count(cur, arg=None, **_):
     if not re.match(r"^\w+(\s+\"?\w+\"?)+$", arg):
         raise ValueError(r"Invalid pattern. Should be \\dc table [columns]..")
-    [table, *columns] = re.split(r'\s+', arg)
-    cols = ', '.join(columns)
-    query = f'select {cols}, count(*) as cnt from {table} group by {cols} order by {cols}'
+    [table, *columns] = re.split(r"\s+", arg)
+    cols = ", ".join(columns)
+    query = (
+        f"select {cols}, count(*) as cnt from {table} group by {cols} order by {cols}"
+    )
     log.debug(query)
     cur.execute(query)
     if cur.description:
@@ -289,6 +293,7 @@ def get_distinct_count(cur, arg=None, **_):
         return [(None, cur, headers, "")]
     else:
         return [(None, None, None, "")]
+
 
 @special_command(
     "\\ss",
@@ -310,6 +315,34 @@ def select_schema(cur, arg=None, arg_type=PARSED_QUERY, verbose=False):
         return [(None, None, None, None)]
     else:
         return [(None, None, None, None)]
+
+
+@special_command(
+    "\\sct",
+    "\\sct [table]",
+    "Show create table",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def show_create_table(cur, arg=None, **_):
+    [table, *args] = re.split(r"\s+", arg)
+    query = f"show create table {table}"
+    log.debug(query)
+    cur.execute(query)
+    rows = cur.fetchall()
+    headers = [x[0] for x in cur.description]
+    ct_idx = headers.index("Create Table")
+    content = rows[0][ct_idx]
+    subprocess.run(
+        [
+            "less",
+            "-R",
+        ],
+        input=content,
+        text=True,
+        check=True,
+    )
+    return [(None, None, None, None)]
 
 
 def find_useful_columns(cur, table):
