@@ -331,7 +331,12 @@ def show_create_table(cur, arg=None, **_):
     cur.execute(query)
     rows = cur.fetchall()
     headers = [x[0] for x in cur.description]
-    ct_idx = headers.index("Create Table")
+    if "Create Table" in headers:
+        ct_idx = headers.index("Create Table")
+    elif "Create View" in headers:
+        ct_idx = headers.index("Create View")
+    else:
+        raise ValueError("No create table or view found")
     content = rows[0][ct_idx]
     subprocess.run(
         [
