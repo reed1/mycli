@@ -338,14 +338,14 @@ def show_create_table(cur, arg=None, **_):
     else:
         raise ValueError("No create table or view found")
     content = rows[0][ct_idx]
+    with open("/tmp/sct_query.sql", "w") as f:
+        f.write(content)
+    cmd = "exec --no-startup-id rterm-float -e show-sql /tmp/sct_query.sql"
     subprocess.run(
-        [
-            "less",
-            "-R",
-        ],
-        input=content,
-        text=True,
+        ["i3-msg", cmd],
         check=True,
+        stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
     )
     return [(None, None, None, None)]
 
