@@ -8,6 +8,7 @@ from time import sleep
 
 import click
 import pyperclip
+import sqlglot
 import sqlparse
 
 from mycli.packages.prompt_utils import confirm_destructive_query
@@ -222,6 +223,78 @@ def copy_query_to_clipboard(sql=None):
     return message
 
 
+@export
+def is_redirect_command(command: str) -> bool:
+    """Is this a shell-style redirect command?
+
+    :param command: string
+
+    """
+    sql_string, operator, shell_string = get_redirect_components(command)
+    return bool(sql_string)
+
+
+@export
+def get_redirect_components(command: str):
+    """Get the parts of a shell-style redirect command."""
+
+    dollar_pos = 0
+    operator_pos = 0
+    try:
+        tokens = sqlglot.tokenize(command)
+    except sqlglot.errors.TokenError:
+        return None, None, None
+    for tok in reversed(tokens):
+        if tok.token_type in (sqlglot.TokenType.GT, sqlglot.TokenType.PIPE):
+            operator_pos = tok.start
+            continue
+        if tok.token_type == sqlglot.TokenType.VAR and tok.text == '$' and tok.start == operator_pos - 1:
+            dollar_pos = tok.start
+            break
+
+    sql_string = command[0:dollar_pos].strip().removesuffix(get_current_delimiter()).rstrip()
+    try:
+        statements = sqlglot.parse(sql_string, read='mysql')
+    except sqlglot.errors.ParseError:
+        return None, None, None
+    if len(statements) != 1:
+        # buglet: the statement count doesn't respect a custom delimiter
+        return None, None, None
+
+    operator_string = ''
+    shell_string = command[operator_pos:]
+    for op in ['>>', '>', '|']:
+        if shell_string.startswith(op):
+            operator_string = op
+            shell_string = shell_string.removeprefix(op)
+            break
+    shell_string = shell_string.strip().removesuffix(get_current_delimiter()).rstrip()
+
+    if ' ' in shell_string and operator_string.startswith('>'):
+        return None, None, None
+
+    if '>' in shell_string and operator_string.startswith('>'):
+        return None, None, None
+
+    if not shell_string:
+        return None, None, None
+
+    if not sql_string:
+        return None, None, None
+
+    return sql_string, operator_string, shell_string
+
+
+@export
+def set_redirect(filename: str, operator: str):
+    if operator == '|':
+        return set_pipe_once(filename)
+    elif operator == '>':
+        return set_once(f'-o {filename}')
+    else:
+        return set_once(filename)
+
+
 @special_command("\\f", "\\f [name [args..]]", "List or execute favorite queries.", arg_type=PARSED_QUERY, case_sensitive=True)
 def execute_favorite_query(cur, arg, **_):
     """Returns (title, rows, headers, status)"""
@@ -408,6 +481,11 @@ def set_once(arg, **_):
 
 
 @export
+def is_redirected():
+    return bool(once_file or pipe_once_process)
+
+
+@export
 def write_once(output):
     global once_file, written_to_once_file
     if output and once_file:
@@ -418,12 +496,26 @@ def write_once(output):
 
 
 @export
-def unset_once_if_written():
+def unset_once_if_written(post_redirect_command) -> None:
     """Unset the once file, if it has been written to."""
     global once_file, written_to_once_file
     if written_to_once_file and once_file:
+        once_filename = once_file.name
         once_file.close()
         once_file = None
+        if post_redirect_command:
+            post_cmd = post_redirect_command.format(shlex.quote(once_filename))
+            try:
+                subprocess.run(
+                    post_cmd,
+                    shell=True,
+                    check=True,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                raise OSError("Redirect post hook failed: {}".format(e))
 
 
 @special_command("\\pipe_once", "\\| command", "Send next result to a subprocess.", aliases=("\\|",))
@@ -450,8 +542,8 @@ def write_pipe_once(output):
     global pipe_once_process, written_to_pipe_once_process
     if output and pipe_once_process:
         try:
-            click.echo(output, file=pipe_once_process.stdin, nl=False)
-            click.echo("\n", file=pipe_once_process.stdin, nl=False)
+            for line in output.split('\n'):
+                print(line, file=pipe_once_process.stdin)
         except (IOError, OSError) as e:
             pipe_once_process.terminate()
             raise OSError("Failed writing to pipe_once subprocess: {}".format(e.strerror))
@@ -464,10 +556,12 @@ def unset_pipe_once_if_written():
     global pipe_once_process, written_to_pipe_once_process
     if written_to_pipe_once_process:
         (stdout_data, stderr_data) = pipe_once_process.communicate()
-        if len(stdout_data) > 0:
-            print(stdout_data.rstrip("\n"))
-        if len(stderr_data) > 0:
-            print(stderr_data.rstrip("\n"))
+        if stdout_data:
+            click.secho(stdout_data.rstrip('\n'))
+        if stderr_data:
+            click.secho(stderr_data.rstrip('\n'), err=True, fg='red')
+        if pipe_once_process.returncode:
+            click.secho(f'process exited with nonzero code {pipe_once_process.returncode}', err=True, fg='red')
         pipe_once_process = None
         written_to_pipe_once_process = False
 

@@ -1,10 +1,62 @@
-Upcoming Release (TBD)
+1.34.2 (2025/07/12)
+======================
+
+Bug Fixes
+--------
+
+* Use plain `print()` to communicate with subprocess.
+
+
+1.34.1 (2025/07/12)
+======================
+
+Internal
+--------
+
+* Bump cli_helpers dependency for corrected output formats.
+
+
+1.34.0 (2025/07/11)
+======================
+
+Features
+--------
+
+* Post-save command hook for redirected output.
+
+Internal
+--------
+
+* Documentation cleanup.
+* Bump cli_helpers dependency for more output formats.
+
+
+1.33.0 (2025/07/07)
+======================
+
+Features
+--------
+
+* Keybindings to insert current date/datetime.
+* Improve feedback when running external commands.
+* Independent format for redirected output.
+* Trailing shell-style redirect syntax.
+
+
+Internal
+--------
+
+* Remove `requirements-dev.txt` in favor of uv/`pyproject.toml`.
+
+
+1.32.0 (2025/07/04)
 ======================
 
 Features
 --------
 
 * Support SSL query parameters on DSNs.
+* More information and care on KeyboardInterrupt.
 
 Internal
 --------
