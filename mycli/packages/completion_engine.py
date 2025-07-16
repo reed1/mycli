@@ -3,6 +3,7 @@ from sqlparse.sql import Comparison, Identifier, Where
 
 from mycli.packages.parseutils import extract_tables, find_prev_keyword, last_word
 from mycli.packages.special import parse_special_command
+from mycli.packages.special.reed_dbcommands import is_reed_command, reed_suggestions
 
 
 def suggest_type(full_text, text_before_cursor):
@@ -103,6 +104,10 @@ def suggest_special(text):
         ]
     elif cmd in ["\\.", "source"]:
         return [{"type": "file_name"}]
+
+    # Check for Reed's custom commands
+    if is_reed_command(cmd):
+        return reed_suggestions(cmd, arg)
 
     return [{"type": "keyword"}, {"type": "special"}]
 

@@ -357,3 +357,56 @@ def find_useful_columns(cur, table):
     columns = [x[0] for x in cur.fetchall()]
     usefuls = set(["id", "parent_id", "level", "kode", "code", "nama", "name"])
     return [x for x in columns if x in usefuls]
+
+
+def is_reed_command(cmd):
+    """Check if a command is one of Reed's special commands."""
+    return cmd in ("\\d", "\\do", "\\dd", "\\du", "\\ddr", "\\dk", "\\tree", "\\gcol", "\\dc", "\\ss", "\\sct")
+
+
+def reed_suggestions(cmd, arg):
+    """Provide context-aware completions for Reed's special commands."""
+    if not arg or not arg.strip():
+        # No argument yet, suggest tables for most commands
+        if cmd == "\\ss":
+            # For schema selection, suggest schemas instead of tables
+            return [{"type": "schema"}]
+        else:
+            # For other commands, suggest tables
+            return [{"type": "table", "schema": []}, {"type": "schema"}]
+    else:
+        # Check if we're still on the first argument
+        args = arg.split()
+        if len(args) == 1 and not arg.endswith(" "):
+            # Still typing the first argument
+            if cmd == "\\ss":
+                # Schema selection
+                return [{"type": "schema"}]
+            else:
+                # Table name completion
+                if "." in args[0]:
+                    # Schema-qualified table
+                    schema = args[0].split(".")[0]
+                    return [{"type": "table", "schema": [schema]}]
+                else:
+                    return [{"type": "table", "schema": []}, {"type": "schema"}]
+        
+        # For commands that need column names after the table
+        elif cmd == "\\dc":
+            if len(args) >= 1 and (arg.endswith(" ") or len(args) > 1):
+                # Already have table name, suggest columns for grouping
+                table_name = args[0]
+                if "." in table_name:
+                    schema, table = table_name.split(".", 1)
+                    table_tuple = (schema, table, None)
+                else:
+                    table_tuple = (None, table_name, None)
+                return [{"type": "column", "tables": [table_tuple]}]
+        
+        # For commands that take table + additional arguments (but not columns)
+        elif cmd in ("\\do", "\\du", "\\dd", "\\ddr", "\\dk", "\\tree"):
+            # These commands take table name + other args, but we don't complete the other args
+            # So return empty suggestions for additional arguments
+            return []
+    
+    return []
