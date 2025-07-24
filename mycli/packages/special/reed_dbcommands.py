@@ -387,7 +387,7 @@ def reed_suggestions(cmd, arg):
                 if "." in args[0]:
                     # Schema-qualified table
                     schema = args[0].split(".")[0]
-                    return [{"type": "table", "schema": [schema]}]
+                    return [{"type": "table", "schema": schema}]
                 else:
                     return [{"type": "table", "schema": []}, {"type": "schema"}]
         
