@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import subprocess
 
@@ -58,7 +59,7 @@ def drill_one(cur, arg=None, **_):
 )
 def drill_up(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
-    cols = find_useful_columns(cur, table)
+    cols = get_filtered_columns(cur, table)
     q_cols = ", ".join(cols)
     qc_cols = ", ".join([f"c.{x}" for x in cols])
     query = f"""
@@ -88,7 +89,7 @@ def drill_up(cur, arg=None, **_):
 )
 def drill_down(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
-    cols = find_useful_columns(cur, table)
+    cols = get_filtered_columns(cur, table)
     extra = " ".join(args)
     q_where = "(1=1)"
     if extra.startswith("where "):
@@ -118,7 +119,7 @@ def drill_down(cur, arg=None, **_):
 )
 def drill_down_recursive(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
-    cols = find_useful_columns(cur, table)
+    cols = get_filtered_columns(cur, table)
     extra = " ".join(args)
     q_where = "(1=1)"
     if extra.startswith("where "):
@@ -156,7 +157,7 @@ def drill_down_kode(cur, arg=None, **_):
     t_source = f"select * from {table}"
     if len(args) > 0 and args[0] == "where":
         t_source += " " + " ".join(args)
-    cols = find_useful_columns(cur, table)
+    cols = get_filtered_columns(cur, table)
     kodes = kode.split(".")
     query = f"""
     with recursive t_source as (
@@ -350,18 +351,35 @@ def show_create_table(cur, arg=None, **_):
     return [(None, None, None, None)]
 
 
-def find_useful_columns(cur, table):
+def get_filtered_columns(cur, table):
     query = f"show fields from {table}"
     log.debug(query)
     cur.execute(query)
     columns = [x[0] for x in cur.fetchall()]
-    usefuls = set(["id", "parent_id", "level", "kode", "code", "nama", "name"])
-    return [x for x in columns if x in usefuls]
+    if os.environ.get("USE_MINIMAL_COLUMN_SET", "0") == "1":
+        minimal_column_set = set(
+            ["id", "parent_id", "level", "kode", "code", "nama", "name"]
+        )
+        return [x for x in columns if x in minimal_column_set]
+    else:
+        return columns
 
 
 def is_reed_command(cmd):
     """Check if a command is one of Reed's special commands."""
-    return cmd in ("\\d", "\\do", "\\dd", "\\du", "\\ddr", "\\dk", "\\tree", "\\gcol", "\\dc", "\\ss", "\\sct")
+    return cmd in (
+        "\\d",
+        "\\do",
+        "\\dd",
+        "\\du",
+        "\\ddr",
+        "\\dk",
+        "\\tree",
+        "\\gcol",
+        "\\dc",
+        "\\ss",
+        "\\sct",
+    )
 
 
 def reed_suggestions(cmd, arg):
@@ -390,7 +408,7 @@ def reed_suggestions(cmd, arg):
                     return [{"type": "table", "schema": schema}]
                 else:
                     return [{"type": "table", "schema": []}, {"type": "schema"}]
-        
+
         # For commands that need column names after the table
         elif cmd == "\\dc":
             if len(args) >= 1 and (arg.endswith(" ") or len(args) > 1):
@@ -402,11 +420,11 @@ def reed_suggestions(cmd, arg):
                 else:
                     table_tuple = (None, table_name, None)
                 return [{"type": "column", "tables": [table_tuple]}]
-        
+
         # For commands that take table + additional arguments (but not columns)
         elif cmd in ("\\do", "\\du", "\\dd", "\\ddr", "\\dk", "\\tree"):
             # These commands take table name + other args, but we don't complete the other args
             # So return empty suggestions for additional arguments
             return []
-    
+
     return []
