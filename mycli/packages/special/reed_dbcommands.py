@@ -297,6 +297,38 @@ def get_distinct_count(cur, arg=None, **_):
 
 
 @special_command(
+    "\\lt",
+    "\\lt '<path>' <table>",
+    "Load data from file into table",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def load_table(cur, arg=None, **_):
+    # Match file path in quotes and table name
+    match = re.match(r"^'([^']+)'\s+(\w+)$", arg.strip())
+    if not match:
+        raise ValueError(r"Invalid pattern. Should be \\lt '<path>' <table>")
+    
+    file_path = match.group(1)
+    table = match.group(2)
+    
+    query = f"""load data local infile '{file_path}'
+into table {table}
+fields terminated by ',' enclosed by '"'
+escaped by '' lines terminated by '\\n'
+ignore 1 lines"""
+    
+    log.debug(query)
+    cur.execute(query)
+    
+    # Get the number of rows affected
+    rows_affected = cur.rowcount
+    status_message = f"Query OK, {rows_affected} rows affected"
+    
+    return [(None, None, None, status_message)]
+
+
+@special_command(
     "\\ss",
     "\\ss[+] [schema]",
     "Select schema",
@@ -377,6 +409,7 @@ def is_reed_command(cmd):
         "\\tree",
         "\\gcol",
         "\\dc",
+        "\\lt",
         "\\ss",
         "\\sct",
     )
@@ -425,6 +458,11 @@ def reed_suggestions(cmd, arg):
         elif cmd in ("\\do", "\\du", "\\dd", "\\ddr", "\\dk", "\\tree"):
             # These commands take table name + other args, but we don't complete the other args
             # So return empty suggestions for additional arguments
+            return []
+        
+        # For \lt command - no suggestions after the path argument
+        elif cmd == "\\lt":
+            # This command takes a quoted path and table name, no completion needed
             return []
 
     return []
