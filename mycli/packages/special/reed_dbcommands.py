@@ -308,23 +308,23 @@ def load_table(cur, arg=None, **_):
     match = re.match(r"^'([^']+)'\s+(\w+)$", arg.strip())
     if not match:
         raise ValueError(r"Invalid pattern. Should be \\lt '<path>' <table>")
-    
+
     file_path = match.group(1)
     table = match.group(2)
-    
+
     query = f"""load data local infile '{file_path}'
 into table {table}
 fields terminated by ',' enclosed by '"'
 escaped by '' lines terminated by '\\n'
 ignore 1 lines"""
-    
+
     log.debug(query)
     cur.execute(query)
-    
+
     # Get the number of rows affected
     rows_affected = cur.rowcount
     status_message = f"Query OK, {rows_affected} rows affected"
-    
+
     return [(None, None, None, status_message)]
 
 
@@ -397,6 +397,34 @@ def get_filtered_columns(cur, table):
         return columns
 
 
+@special_command(
+    "\\df",
+    "\\df [recipe]",
+    "Directed format - set pager and table format",
+    arg_type=PARSED_QUERY,
+    case_sensitive=True,
+)
+def directed_format(cur, arg=None, **kwargs):
+    from .iocommands import set_pager_enabled
+    from .main import execute
+
+    recipe = arg.strip().upper() if arg else "A"
+
+    if recipe == "A":
+        # Recipe A: visidata-db pager with CSV format
+        os.environ["PAGER"] = "visidata-db"
+        set_pager_enabled(True)
+        list(execute(cur, "\\T csv"))
+        return [(None, None, None, "Directed format A: pager=visidata-db, format=csv")]
+    elif recipe == "C":
+        # Recipe C: no pager with ASCII format
+        set_pager_enabled(False)
+        list(execute(cur, "\\T ascii"))
+        return [(None, None, None, "Directed format C: pager=disabled, format=ascii")]
+    else:
+        return [(None, None, None, f"Unknown recipe '{recipe}'. Use A or C.")]
+
+
 def is_reed_command(cmd):
     """Check if a command is one of Reed's special commands."""
     return cmd in (
@@ -412,6 +440,7 @@ def is_reed_command(cmd):
         "\\lt",
         "\\ss",
         "\\sct",
+        "\\df",
     )
 
 
@@ -459,10 +488,17 @@ def reed_suggestions(cmd, arg):
             # These commands take table name + other args, but we don't complete the other args
             # So return empty suggestions for additional arguments
             return []
-        
+
         # For \lt command - no suggestions after the path argument
         elif cmd == "\\lt":
             # This command takes a quoted path and table name, no completion needed
+            return []
+
+        # For \df command - suggest recipe options
+        elif cmd == "\\df":
+            if len(args) == 0 or (len(args) == 1 and not arg.endswith(" ")):
+                # Suggest recipe options
+                return [{"text": "A"}, {"text": "C"}]
             return []
 
     return []
