@@ -38,9 +38,15 @@ def drill_one(cur, arg=None, **_):
     [table, *args] = re.split(r"\s+", arg)
     if len(args) == 0:
         query = f"select * from {table} limit 100"
-    elif len(args) == 1:
+    elif args[0].isdigit():
         row_id = int(args[0])
         query = f"select * from {table} where id = {row_id}"
+    else:
+        extra_clause = " ".join(args)
+        if "limit" in extra_clause.lower():
+            query = f"select * from {table} {extra_clause}"
+        else:
+            query = f"select * from {table} {extra_clause} limit 100"
     log.debug(query)
     cur.execute(query)
     if cur.description:
