@@ -109,6 +109,7 @@ class MyCli(object):
         self.defaults_suffix = defaults_suffix
         self.login_path = login_path
         self.toolbar_error_message = None
+        self._pending_command_from_pager = None
 
         # self.cnf_files is a class variable that stores the list of mysql
         # config files to read in at launch.
@@ -680,10 +681,15 @@ class MyCli(object):
 
         def one_iteration(text=None):
             if text is None:
-                try:
-                    text = self.prompt_app.prompt()
-                except KeyboardInterrupt:
-                    return
+                # Check for pending command from pager
+                if self._pending_command_from_pager:
+                    text = self._pending_command_from_pager
+                    self._pending_command_from_pager = None
+                else:
+                    try:
+                        text = self.prompt_app.prompt()
+                    except KeyboardInterrupt:
+                        return
 
                 special.set_expanded_output(False)
                 special.set_forced_horizontal_output(False)
@@ -998,6 +1004,13 @@ class MyCli(object):
                             yield line + "\n"
 
                     click.echo_via_pager(newlinewrapper(buf))
+
+                    # Call on_pager_close from reed_dbcommands module
+                    from mycli.packages.special.reed_dbcommands import on_pager_close
+                    pending_cmd = on_pager_close()
+                    if pending_cmd:
+                        # Schedule the command to be executed in the next iteration
+                        self._pending_command_from_pager = pending_cmd
                 else:
                     for line in buf:
                         click.secho(line)

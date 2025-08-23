@@ -7,6 +7,63 @@ from .main import special_command, PARSED_QUERY
 
 log = logging.getLogger(__name__)
 
+RVISIDATA_DB_LAST_REPLY_FILE = "/tmp/rlocal/visidata/last-reply"
+
+# Track the last tabular command context
+_last_tabular_command_table = None
+
+
+def reed_tabular_command(func):
+    """Decorator to mark commands as reed tabular commands."""
+
+    # Wrap the function to track when it's called
+    def wrapper(*args, **kwargs):
+        global _last_tabular_command_table
+
+        # Clean up the reply file
+        if os.path.exists(RVISIDATA_DB_LAST_REPLY_FILE):
+            os.remove(RVISIDATA_DB_LAST_REPLY_FILE)
+
+        # Extract table and id from arguments for tracking
+        if "arg" in kwargs and kwargs["arg"]:
+            arg_parts = re.split(r"\s+", kwargs["arg"])
+            if len(arg_parts) >= 1:
+                _last_tabular_command_table = arg_parts[0]
+
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def on_pager_close():
+    """Called after the pager closes. Returns pending command if there is one."""
+    global _last_tabular_command_table
+
+    if not os.path.exists(RVISIDATA_DB_LAST_REPLY_FILE):
+        return None
+
+    with open(RVISIDATA_DB_LAST_REPLY_FILE, "r") as f:
+        last_reply = f.read().strip()
+
+    if not last_reply or not _last_tabular_command_table:
+        return None
+
+    # Parse the reply format
+    if last_reply.startswith("drill_up."):
+        # Extract ID from drill_up.<id> format
+        parts = last_reply.split(".")
+        new_id = parts[1]
+        command_to_execute = f"\\du {_last_tabular_command_table} {new_id}"
+        return command_to_execute
+    elif last_reply.startswith("drill_down."):
+        # Extract ID from drill_down.<id> format
+        parts = last_reply.split(".")
+        new_id = parts[1]
+        command_to_execute = f"\\dd {_last_tabular_command_table} {new_id}"
+        return command_to_execute
+
+    return None
+
 
 @special_command(
     "\\d",
@@ -34,6 +91,7 @@ def describe(cur, arg=None, **_):
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
+@reed_tabular_command
 def drill_one(cur, arg=None, **_):
     [table, *args] = re.split(r"\s+", arg)
     if len(args) == 0:
@@ -63,6 +121,7 @@ def drill_one(cur, arg=None, **_):
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
+@reed_tabular_command
 def drill_up(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
     cols = get_filtered_columns(cur, table)
@@ -93,6 +152,7 @@ def drill_up(cur, arg=None, **_):
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
+@reed_tabular_command
 def drill_down(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
     cols = get_filtered_columns(cur, table)
@@ -123,6 +183,7 @@ def drill_down(cur, arg=None, **_):
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
+@reed_tabular_command
 def drill_down_recursive(cur, arg=None, **_):
     [table, row_id, *args] = re.split(r"\s+", arg)
     cols = get_filtered_columns(cur, table)
@@ -158,6 +219,7 @@ def drill_down_recursive(cur, arg=None, **_):
     arg_type=PARSED_QUERY,
     case_sensitive=True,
 )
+@reed_tabular_command
 def drill_down_kode(cur, arg=None, **_):
     [table, kode, *args] = re.split(r"\s+", arg)
     t_source = f"select * from {table}"
