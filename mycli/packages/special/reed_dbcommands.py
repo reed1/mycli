@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 
-from .main import special_command, PARSED_QUERY
+from .main import special_command, ArgType
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def on_pager_close():
     "\\d",
     "\\d [table]",
     "Describe table",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def describe(cur, arg=None, **_):
@@ -88,7 +88,7 @@ def describe(cur, arg=None, **_):
     "\\do",
     "\\do [table] [id]",
     "Get one row",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 @reed_tabular_command
@@ -118,7 +118,7 @@ def drill_one(cur, arg=None, **_):
     "\\du",
     "\\du [table] [id]",
     "Drill up row",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 @reed_tabular_command
@@ -149,7 +149,7 @@ def drill_up(cur, arg=None, **_):
     "\\dd",
     "\\dd [table] [id]",
     "Drill down row",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 @reed_tabular_command
@@ -180,7 +180,7 @@ def drill_down(cur, arg=None, **_):
     "\\ddr",
     "\\ddr [table] [id]",
     "Drill down row recursively",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 @reed_tabular_command
@@ -216,7 +216,7 @@ def drill_down_recursive(cur, arg=None, **_):
     "\\dk",
     "\\dk [table] [kode]",
     "Drill down kode",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 @reed_tabular_command
@@ -265,7 +265,7 @@ def drill_down_kode(cur, arg=None, **_):
     "\\tree",
     "\\tree [table] [root_id]",
     "Show tree for a table",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def tree(cur, arg=None, **_):
@@ -313,7 +313,7 @@ def tree(cur, arg=None, **_):
     "\\gcol",
     "\\gcol <table>",
     "Get columns",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def get_columns(cur, arg=None, **_):
@@ -344,7 +344,7 @@ def get_columns(cur, arg=None, **_):
     "\\dc",
     "\\dc [table] [columns]",
     "Get distinct count of columns",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def get_distinct_count(cur, arg=None, **_):
@@ -368,7 +368,7 @@ def get_distinct_count(cur, arg=None, **_):
     "\\lt",
     "\\lt '<path>' <table>",
     "Load data from file into table",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def load_table(cur, arg=None, **_):
@@ -400,10 +400,10 @@ ignore 1 lines"""
     "\\ss",
     "\\ss[+] [schema]",
     "Select schema",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
-def select_schema(cur, arg=None, arg_type=PARSED_QUERY, verbose=False):
+def select_schema(cur, arg=None, **_):
     schema = arg
     if not schema:
         query = "SELECT schema_name FROM information_schema.schemata"
@@ -422,7 +422,7 @@ def select_schema(cur, arg=None, arg_type=PARSED_QUERY, verbose=False):
     "\\sct",
     "\\sct [table]",
     "Show create table",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def show_create_table(cur, arg=None, **_):
@@ -469,7 +469,7 @@ def get_filtered_columns(cur, table):
     "\\df",
     "\\df [recipe]",
     "Directed format - set pager and table format",
-    arg_type=PARSED_QUERY,
+    arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def directed_format(cur, arg=None, **kwargs):
