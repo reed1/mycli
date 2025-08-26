@@ -1,3 +1,5 @@
+# type: ignore
+
 import os
 
 import pymysql
@@ -10,7 +12,7 @@ from test.utils import dbtest, is_expanded_output, run, set_expanded_output
 def assert_result_equal(result, title=None, rows=None, headers=None, status=None, auto_status=True, assert_contains=False):
     """Assert that an sqlexecute.run() result matches the expected values."""
     if status is None and auto_status and rows:
-        status = "{} row{} in set".format(len(rows), "s" if len(rows) > 1 else "")
+        status = f"{len(rows)} row{'s' if len(rows) > 1 else ''} in set"
     fields = {"title": title, "rows": rows, "headers": headers, "status": status}
 
     if assert_contains:
@@ -128,7 +130,7 @@ def test_favorite_query(executor):
     assert_result_equal(results, title="> select * from test where a like 'a%'", headers=["a"], rows=[("abc",)], auto_status=False)
 
     results = run(executor, "\\fd test-a")
-    assert_result_equal(results, status="test-a: Deleted")
+    assert_result_equal(results, status="test-a: Deleted.")
 
 
 @dbtest
@@ -150,7 +152,7 @@ def test_favorite_query_multiple_statement(executor):
     assert expected == results
 
     results = run(executor, "\\fd test-ad")
-    assert_result_equal(results, status="test-ad: Deleted")
+    assert_result_equal(results, status="test-ad: Deleted.")
 
 
 @dbtest
@@ -170,7 +172,7 @@ def test_favorite_query_expanded_output(executor):
     set_expanded_output(False)
 
     results = run(executor, "\\fd test-ae")
-    assert_result_equal(results, status="test-ae: Deleted")
+    assert_result_equal(results, status="test-ae: Deleted.")
 
 
 @dbtest
@@ -206,14 +208,14 @@ def test_system_command_output(executor):
     eol = os.linesep
     test_dir = os.path.abspath(os.path.dirname(__file__))
     test_file_path = os.path.join(test_dir, "test.txt")
-    results = run(executor, "system cat {0}".format(test_file_path))
+    results = run(executor, f"system cat {test_file_path}")
     assert_result_equal(results, status=f"mycli rocks!{eol}")
 
 
 @dbtest
 def test_cd_command_current_dir(executor):
     test_path = os.path.abspath(os.path.dirname(__file__))
-    run(executor, "system cd {0}".format(test_path))
+    run(executor, f"system cd {test_path}")
     assert os.getcwd() == test_path
 
 

@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import re
+from typing import Generator
 
 import sqlparse
 
 
-class DelimiterCommand(object):
-    def __init__(self):
+class DelimiterCommand:
+    def __init__(self) -> None:
         self._delimiter = ";"
 
-    def _split(self, sql):
+    def _split(self, sql: str) -> list[str]:
         """Temporary workaround until sqlparse.split() learns about custom
         delimiters."""
 
@@ -27,7 +30,7 @@ class DelimiterCommand(object):
 
         return [stmt.replace(";", self._delimiter).replace(placeholder, ";") for stmt in split]
 
-    def queries_iter(self, input_str):
+    def queries_iter(self, input_str: str) -> Generator[str, None, None]:
         """Iterate over queries in the input string."""
 
         queries = self._split(input_str)
@@ -52,7 +55,7 @@ class DelimiterCommand(object):
                         combined_statement += delimiter
                     queries = self._split(combined_statement)[1:]
 
-    def set(self, arg, **_):
+    def set(self, arg: str, **_) -> list[tuple[None, None, None, str]]:
         """Change delimiter.
 
         Since `arg` is everything that follows the DELIMITER token
@@ -71,8 +74,8 @@ class DelimiterCommand(object):
             return [(None, None, None, 'Invalid delimiter "delimiter"')]
 
         self._delimiter = delimiter
-        return [(None, None, None, "Changed delimiter to {}".format(delimiter))]
+        return [(None, None, None, f'Changed delimiter to {delimiter}')]
 
     @property
-    def current(self):
+    def current(self) -> str:
         return self._delimiter

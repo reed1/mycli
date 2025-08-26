@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from collections import Counter
 import logging
 import re
+from typing import Any, Collection, Generator, Iterable, Literal
 
-from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion
+from prompt_toolkit.completion.base import Document
 
 from mycli.packages.completion_engine import suggest_type
 from mycli.packages.filepaths import complete_path, parse_path, suggest_path
 from mycli.packages.parseutils import last_word
+from mycli.packages.special import llm
 from mycli.packages.special.favoritequeries import FavoriteQueries
 
 _logger = logging.getLogger(__name__)
@@ -868,7 +873,7 @@ class SQLCompleter(Completer):
         "TIDB_SHARD",
     ]
 
-    show_items = []
+    show_items: list[Completion] = []
 
     change_items = [
         "MASTER_BIND",
@@ -892,9 +897,14 @@ class SQLCompleter(Completer):
         "IGNORE_SERVER_IDS",
     ]
 
-    users = []
+    users: list[str] = []
 
-    def __init__(self, smart_completion=True, supported_formats=(), keyword_casing="auto"):
+    def __init__(
+        self,
+        smart_completion: bool = True,
+        supported_formats: tuple = (),
+        keyword_casing: str = "auto",
+    ) -> None:
         super(self.__class__, self).__init__()
         self.smart_completion = smart_completion
         self.reserved_words = set()
@@ -902,60 +912,60 @@ class SQLCompleter(Completer):
             self.reserved_words.update(x.split())
         self.name_pattern = re.compile(r"^[_a-z][_a-z0-9\$]*$")
 
-        self.special_commands = []
+        self.special_commands: list[str] = []
         self.table_formats = supported_formats
         if keyword_casing not in ("upper", "lower", "auto"):
             keyword_casing = "auto"
         self.keyword_casing = keyword_casing
         self.reset_completions()
 
-    def escape_name(self, name):
+    def escape_name(self, name: str) -> str:
         if name and ((not self.name_pattern.match(name)) or (name.upper() in self.reserved_words) or (name.upper() in self.functions)):
-            name = "`%s`" % name
+            name = f'`{name}`'
 
         return name
 
-    def unescape_name(self, name):
+    def unescape_name(self, name: str) -> str:
         """Unquote a string."""
         if name and name[0] == '"' and name[-1] == '"':
             name = name[1:-1]
 
         return name
 
-    def escaped_names(self, names):
+    def escaped_names(self, names: Collection[str]) -> list[str]:
         return [self.escape_name(name) for name in names]
 
-    def extend_special_commands(self, special_commands):
+    def extend_special_commands(self, special_commands: list[str]) -> None:
         # Special commands are not part of all_completions since they can only
         # be at the beginning of a line.
         self.special_commands.extend(special_commands)
 
-    def extend_database_names(self, databases):
+    def extend_database_names(self, databases: list[str]) -> None:
         self.databases.extend(databases)
 
-    def extend_keywords(self, keywords, replace=False):
+    def extend_keywords(self, keywords: list[str], replace: bool = False) -> None:
         if replace:
             self.keywords = keywords
         else:
             self.keywords.extend(keywords)
         self.all_completions.update(keywords)
 
-    def extend_show_items(self, show_items):
+    def extend_show_items(self, show_items: Iterable[tuple]) -> None:
         for show_item in show_items:
             self.show_items.extend(show_item)
             self.all_completions.update(show_item)
 
-    def extend_change_items(self, change_items):
+    def extend_change_items(self, change_items: Iterable[tuple]) -> None:
         for change_item in change_items:
             self.change_items.extend(change_item)
             self.all_completions.update(change_item)
 
-    def extend_users(self, users):
+    def extend_users(self, users: Iterable[tuple]) -> None:
         for user in users:
             self.users.extend(user)
             self.all_completions.update(user)
 
-    def extend_schemata(self, schema):
+    def extend_schemata(self, schema: str | None) -> None:
         if schema is None:
             return
         metadata = self.dbmetadata["tables"]
@@ -966,50 +976,36 @@ class SQLCompleter(Completer):
             metadata[schema] = {}
         self.all_completions.update(schema)
 
-    def extend_relations(self, data, kind):
+    def extend_relations(self, data: list[tuple[str, str]], kind: Literal['tables', 'views']) -> None:
         """Extend metadata for tables or views
 
         :param data: list of (rel_name, ) tuples
         :param kind: either 'tables' or 'views'
         :return:
         """
-        # 'data' is a generator object. It can throw an exception while being
-        # consumed. This could happen if the user has launched the app without
-        # specifying a database name. This exception must be handled to prevent
-        # crashing.
-        try:
-            data = [self.escaped_names(d) for d in data]
-        except Exception:
-            data = []
+        data_ll = [self.escaped_names(d) for d in data]
 
         # dbmetadata['tables'][$schema_name][$table_name] should be a list of
         # column names. Default to an asterisk
         metadata = self.dbmetadata[kind]
-        for relname in data:
+        for relname in data_ll:
             try:
                 metadata[self.dbname][relname[0]] = ["*"]
             except KeyError:
                 _logger.error("%r %r listed in unrecognized schema %r", kind, relname[0], self.dbname)
             self.all_completions.add(relname[0])
 
-    def extend_columns(self, column_data, kind):
+    def extend_columns(self, column_data: list[tuple[str, str]], kind: Literal['tables', 'views']) -> None:
         """Extend column metadata
 
         :param column_data: list of (rel_name, column_name) tuples
         :param kind: either 'tables' or 'views'
         :return:
         """
-        # 'column_data' is a generator object. It can throw an exception while
-        # being consumed. This could happen if the user has launched the app
-        # without specifying a database name. This exception must be handled to
-        # prevent crashing.
-        try:
-            column_data = [self.escaped_names(d) for d in column_data]
-        except Exception:
-            column_data = []
+        column_data_ll = [self.escaped_names(d) for d in column_data]
 
         metadata = self.dbmetadata[kind]
-        for relname, column in column_data:
+        for relname, column in column_data_ll:
             if relname not in metadata[self.dbname]:
                 _logger.error("relname '%s' was not found in db '%s'", relname, self.dbname)
                 # this could happen back when the completer populated via two calls:
@@ -1020,10 +1016,11 @@ class SQLCompleter(Completer):
             metadata[self.dbname][relname].append(column)
             self.all_completions.add(column)
 
-    def extend_functions(self, func_data, builtin=False):
+    def extend_functions(self, func_data: list[str] | Generator[tuple[str, str]], builtin: bool = False) -> None:
         # if 'builtin' is set this is extending the list of builtin functions
         if builtin:
-            self.functions.extend(func_data)
+            if isinstance(func_data, list):
+                self.functions.extend(func_data)
             return
 
         # 'func_data' is a generator object. It can throw an exception while
@@ -1031,31 +1028,37 @@ class SQLCompleter(Completer):
         # without specifying a database name. This exception must be handled to
         # prevent crashing.
         try:
-            func_data = [self.escaped_names(d) for d in func_data]
+            func_data_ll = [self.escaped_names(d) for d in func_data]
         except Exception:
-            func_data = []
+            func_data_ll = []
 
         # dbmetadata['functions'][$schema_name][$function_name] should return
         # function metadata.
         metadata = self.dbmetadata["functions"]
 
-        for func in func_data:
+        for func in func_data_ll:
             metadata[self.dbname][func[0]] = None
             self.all_completions.add(func[0])
 
-    def set_dbname(self, dbname):
-        self.dbname = dbname
+    def set_dbname(self, dbname: str | None) -> None:
+        self.dbname = dbname or ''
 
-    def reset_completions(self):
-        self.databases = []
-        self.users = []
-        self.show_items = []
+    def reset_completions(self) -> None:
+        self.databases: list[str] = []
+        self.users: list[str] = []
+        self.show_items: list[Completion] = []
         self.dbname = ""
-        self.dbmetadata = {"tables": {}, "views": {}, "functions": {}}
+        self.dbmetadata: dict[str, Any] = {"tables": {}, "views": {}, "functions": {}}
         self.all_completions = set(self.keywords + self.functions)
 
     @staticmethod
-    def find_matches(text, collection, start_only=False, fuzzy=True, casing=None):
+    def find_matches(
+        text: str,
+        collection: Collection,
+        start_only: bool = False,
+        fuzzy: bool = True,
+        casing: str | None = None,
+    ) -> Generator[Completion, None, None]:
         """Find completion matches for the given text.
 
         Given the user's input text and a collection of available
@@ -1076,7 +1079,7 @@ class SQLCompleter(Completer):
 
         if fuzzy:
             regex = ".*?".join(map(re.escape, text))
-            pat = re.compile("(%s)" % regex)
+            pat = re.compile(f'({regex})')
             for item in collection:
                 r = pat.search(item.lower())
                 if r:
@@ -1091,14 +1094,19 @@ class SQLCompleter(Completer):
         if casing == "auto":
             casing = "lower" if last and last[-1].islower() else "upper"
 
-        def apply_case(kw):
+        def apply_case(kw: str) -> str:
             if casing == "upper":
                 return kw.upper()
             return kw.lower()
 
         return (Completion(z if casing is None else apply_case(z), -len(text)) for x, y, z in completions)
 
-    def get_completions(self, document, complete_event, smart_completion=None):
+    def get_completions(
+        self,
+        document: Document,
+        complete_event: CompleteEvent | None,
+        smart_completion: bool | None = None,
+    ) -> Iterable[Completion]:
         word_before_cursor = document.get_word_before_cursor(WORD=True)
         if smart_completion is None:
             smart_completion = self.smart_completion
@@ -1108,7 +1116,7 @@ class SQLCompleter(Completer):
         if not smart_completion:
             return self.find_matches(word_before_cursor, self.all_completions, start_only=True, fuzzy=False)
 
-        completions = []
+        completions: list[Completion] = []
         suggestions = suggest_type(document.text, document.text_before_cursor)
 
         for suggestion in suggestions:
@@ -1145,57 +1153,74 @@ class SQLCompleter(Completer):
 
             elif suggestion["type"] == "table":
                 tables = self.populate_schema_objects(suggestion["schema"], "tables")
-                tables = self.find_matches(word_before_cursor, tables)
-                completions.extend(tables)
+                tables_m = self.find_matches(word_before_cursor, tables)
+                completions.extend(tables_m)
 
             elif suggestion["type"] == "view":
                 views = self.populate_schema_objects(suggestion["schema"], "views")
-                views = self.find_matches(word_before_cursor, views)
-                completions.extend(views)
+                views_m = self.find_matches(word_before_cursor, views)
+                completions.extend(views_m)
 
             elif suggestion["type"] == "alias":
                 aliases = suggestion["aliases"]
-                aliases = self.find_matches(word_before_cursor, aliases)
-                completions.extend(aliases)
+                aliases_m = self.find_matches(word_before_cursor, aliases)
+                completions.extend(aliases_m)
 
             elif suggestion["type"] == "database":
-                dbs = self.find_matches(word_before_cursor, self.databases)
-                completions.extend(dbs)
+                dbs_m = self.find_matches(word_before_cursor, self.databases)
+                completions.extend(dbs_m)
 
             elif suggestion["type"] == "keyword":
-                keywords = self.find_matches(word_before_cursor, self.keywords, casing=self.keyword_casing)
-                completions.extend(keywords)
+                keywords_m = self.find_matches(word_before_cursor, self.keywords, casing=self.keyword_casing)
+                completions.extend(keywords_m)
 
             elif suggestion["type"] == "show":
-                show_items = self.find_matches(
+                show_items_m = self.find_matches(
                     word_before_cursor, self.show_items, start_only=False, fuzzy=True, casing=self.keyword_casing
                 )
-                completions.extend(show_items)
+                completions.extend(show_items_m)
 
             elif suggestion["type"] == "change":
-                change_items = self.find_matches(word_before_cursor, self.change_items, start_only=False, fuzzy=True)
-                completions.extend(change_items)
+                change_items_m = self.find_matches(word_before_cursor, self.change_items, start_only=False, fuzzy=True)
+                completions.extend(change_items_m)
+
             elif suggestion["type"] == "user":
-                users = self.find_matches(word_before_cursor, self.users, start_only=False, fuzzy=True)
-                completions.extend(users)
+                users_m = self.find_matches(word_before_cursor, self.users, start_only=False, fuzzy=True)
+                completions.extend(users_m)
 
             elif suggestion["type"] == "special":
-                special = self.find_matches(word_before_cursor, self.special_commands, start_only=True, fuzzy=False)
-                completions.extend(special)
-            elif suggestion["type"] == "favoritequery":
-                queries = self.find_matches(word_before_cursor, FavoriteQueries.instance.list(), start_only=False, fuzzy=True)
-                completions.extend(queries)
-            elif suggestion["type"] == "table_format":
-                formats = self.find_matches(word_before_cursor, self.table_formats)
+                special_m = self.find_matches(word_before_cursor, self.special_commands, start_only=True, fuzzy=False)
+                completions.extend(special_m)
 
-                completions.extend(formats)
+            elif suggestion["type"] == "favoritequery":
+                if hasattr(FavoriteQueries, 'instance') and hasattr(FavoriteQueries.instance, 'list'):
+                    queries_m = self.find_matches(word_before_cursor, FavoriteQueries.instance.list(), start_only=False, fuzzy=True)
+                    completions.extend(queries_m)
+
+            elif suggestion["type"] == "table_format":
+                formats_m = self.find_matches(word_before_cursor, self.table_formats)
+                completions.extend(formats_m)
+
             elif suggestion["type"] == "file_name":
-                file_names = self.find_files(word_before_cursor)
-                completions.extend(file_names)
+                file_names_m = self.find_files(word_before_cursor)
+                completions.extend(file_names_m)
+            elif suggestion["type"] == "llm":
+                if not word_before_cursor:
+                    tokens = document.text.split()[1:]
+                else:
+                    tokens = document.text.split()[1:-1]
+                possible_entries = llm.get_completions(tokens)
+                subcommands_m = self.find_matches(
+                    word_before_cursor,
+                    possible_entries,
+                    start_only=False,
+                    fuzzy=True,
+                )
+                completions.extend(subcommands_m)
 
         return completions
 
-    def find_files(self, word):
+    def find_files(self, word: str) -> Generator[Completion, None, None]:
         """Yield matching directory or file names.
 
         :param word:
@@ -1209,7 +1234,7 @@ class SQLCompleter(Completer):
             if suggestion:
                 yield Completion(suggestion, position)
 
-    def populate_scoped_cols(self, scoped_tbls):
+    def populate_scoped_cols(self, scoped_tbls: list[tuple[str | None, str, str | None]]) -> list[str]:
         """Find all columns in a set of scoped_tables
         :param scoped_tbls: list of (schema, table, alias) tuples
         :return: list of column names
@@ -1247,7 +1272,7 @@ class SQLCompleter(Completer):
 
         return columns
 
-    def populate_schema_objects(self, schema, obj_type):
+    def populate_schema_objects(self, schema: str | None, obj_type: str) -> list[str]:
         """Returns list of tables or functions for a (optional) schema"""
         metadata = self.dbmetadata[obj_type]
         schema = schema or self.dbname

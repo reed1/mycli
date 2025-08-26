@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pygments.lexer import inherit
 from pygments.lexers.sql import MySqlLexer
 from pygments.token import Keyword

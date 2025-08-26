@@ -1,3 +1,5 @@
+# type: ignore
+
 import os
 import shutil
 import sys
@@ -46,7 +48,7 @@ def before_all(context):
 
     vi = "_".join([str(x) for x in sys.version_info[:3]])
     db_name = get_db_name_from_context(context)
-    db_name_full = "{0}_{1}".format(db_name, vi)
+    db_name_full = f"{db_name}_{vi}"
 
     # Store get params from config/environment variables
     context.conf = {
@@ -65,9 +67,8 @@ def before_all(context):
     _, my_cnf = mkstemp()
     with open(my_cnf, "w") as f:
         f.write(
-            "[client]\npager={0} {1} {2}\n".format(
-                sys.executable, os.path.join(context.package_root, "test/features/wrappager.py"), context.conf["pager_boundary"]
-            )
+            f'[client]\npager={sys.executable} '
+            f'{os.path.join(context.package_root, "test/features/wrappager.py")} {context.conf["pager_boundary"]}\n'
         )
     context.conf["defaults-file"] = my_cnf
     context.conf["myclirc"] = os.path.join(context.package_root, "test", "myclirc")
@@ -97,6 +98,9 @@ def before_step(context, _):
 
 
 def before_scenario(context, arg):
+    # Skip scenarios marked skip_py312 when running on Python 3.12
+    if sys.version_info[:2] == (3, 12) and "skip_py312" in arg.tags:
+        arg.skip("Skipped on Python 3.12")
     with open(test_log_file, "w") as f:
         f.write("")
     if arg.location.filename not in SELF_CONNECTING_FEATURES:
@@ -123,7 +127,7 @@ def after_scenario(context, _):
             user = context.conf["user"]
             host = context.conf["host"]
             dbname = context.currentdb
-            context.cli.expect_exact("{0}@{1}:{2}>".format(user, host, dbname), timeout=5)
+            context.cli.expect_exact(f"{user}@{host}:{dbname}>", timeout=5)
         context.cli.sendcontrol("c")
         context.cli.sendcontrol("d")
         context.cli.expect_exact(pexpect.EOF, timeout=5)

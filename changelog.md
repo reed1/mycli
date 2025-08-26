@@ -1,3 +1,146 @@
+1.38.3 (2025/08/21)
+==============
+
+Bug Fixes
+--------
+* Fix the infinite looping when `\llm` is called without args.
+
+
+1.38.2 (2025/08/19)
+======================
+
+Bug Fixes
+--------
+* Fix failure to save Favorite Queries.
+
+
+1.38.1 (2025/08/19)
+======================
+
+Bug Fixes
+--------
+* Partially fix Favorite Query completion crash.
+
+
+Internal
+--------
+* Improve CI worflow naming.
+
+
+1.38.0 (2025/08/16)
+======================
+
+Features
+--------
+* Add LLM support.
+
+
+Bug Fixes
+--------
+* Improve missing ssh-extras message.
+* Fix repeated control-r in traditional reverse isearch.
+* Fix spelling of `ssl-verify-server-cert` option.
+* Improve handling of `ssl-verify-server-cert` False values.
+* Guard against missing contributors file on startup.
+* Friendlier errors on password-file failures.
+* Better handle empty-string passwords.
+* Permit empty-string passwords at the interactive prompt.
+
+
+Internal
+--------
+* Improve pull request template lint commands.
+* Complete typehinting the non-test codebase.
+* Modernization: conversion to f-strings.
+* Modernization: remove more Python 2 compatibility logic.
+
+
+1.37.1 (2025/07/28)
+======================
+
+Internal
+--------
+
+* Align LICENSE with SPDX format.
+* Fix deprecated `license` specification format in `pyproject.toml`.
+
+
+1.37.0 (2025/07/28)
+======================
+
+Features
+--------
+* Show username in password prompt.
+* Add `mysql` and `mysql_unicode` table formats.
+
+
+Bug Fixes
+--------
+* Help Windows installations find a working default pager.
+
+
+Internal
+--------
+
+* Support only Python 3.9+ in `pyproject.toml`.
+* Add linting suggestion to pull request template.
+* Make CI names and properties more consistent.
+* Enable typechecking for most of the non-test codebase.
+* CI: turn off fail-fast matrix strategy.
+* Remove unused Python 2 compatibility code.
+* Also run CI tests without installing SSH extra dependencies.
+* Update `cli_helpers` dependency, and list of table formats.
+
+
+1.36.0 (2025/07/19)
+======================
+
+Features
+--------
+* Make control-r reverse search style configurable.
+* Make fzf search key bindings more compatible with traditional isearch.
+
+
+Bug Fixes
+--------
+
+* Better reset after pipe command failures.
+
+
+Internal
+--------
+
+* Add limited typechecking to CI.
+
+
+1.35.0 (2025/07/18)
+======================
+
+Features
+--------
+
+* Support chained pipe operators such as `select first_name from users $| grep '^J' $| head -10`.
+* Support trailing file redirects after pipe operators, such as `select 10 $| tail -1 $> ten.txt`.
+
+
+1.34.4 (2025/07/15)
+======================
+
+Bug Fixes
+--------
+
+* Fix old-style `\pipe_once`.
+
+
+1.34.3 (2025/07/14)
+======================
+
+Bug Fixes
+--------
+
+* Use only `communicate()` to communicate with subprocess.
+
+
 1.34.2 (2025/07/12)
 ======================
 
