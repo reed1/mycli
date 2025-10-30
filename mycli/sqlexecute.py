@@ -16,6 +16,7 @@ from pymysql.cursors import Cursor
 from mycli import connection_keepalive
 from mycli.packages.special import iocommands
 from mycli.packages.special.main import CommandNotFound, execute
+from mycli.packages.parseutils import query_starts_with, query_has_where_clause
 
 try:
     import paramiko  # noqa: F401
@@ -30,6 +31,18 @@ FIELD_TYPES.update({FIELD_TYPE.NULL: type(None)})
 
 
 ERROR_CODE_ACCESS_DENIED = 1045
+
+
+class UpdateWithoutWhereError(Exception):
+    pass
+
+
+def validate_update_has_where(sql: str) -> None:
+    if query_starts_with(sql, ["update"]) and not query_has_where_clause(sql):
+        raise UpdateWithoutWhereError(
+            "UPDATE query must have a WHERE clause. "
+            "Executing UPDATE without WHERE would affect all rows in the table."
+        )
 
 
 class ServerSpecies(enum.Enum):
@@ -330,6 +343,7 @@ class SQLExecute:
                     yield result
             except CommandNotFound:  # Regular SQL
                 _logger.debug("Regular sql statement. sql: %r", sql)
+                validate_update_has_where(sql)
                 cur.execute(sql)
                 while True:
                     yield self.get_result(cur)

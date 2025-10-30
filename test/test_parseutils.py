@@ -11,6 +11,7 @@ from mycli.packages.parseutils import (
     query_has_where_clause,
     query_starts_with,
 )
+from mycli.sqlexecute import validate_update_has_where, UpdateWithoutWhereError
 
 
 def test_empty_string():
@@ -191,3 +192,32 @@ def test_query_has_where_clause(sql, has_where_clause):
 )
 def test_is_dropping_database(sql, dbname, is_dropping):
     assert is_dropping_database(sql, dbname) == is_dropping
+
+
+def test_validate_update_with_where_clause():
+    sql = "UPDATE users SET name = 'John' WHERE id = 1"
+    validate_update_has_where(sql)
+
+
+def test_validate_update_without_where_clause():
+    sql = "UPDATE users SET name = 'John'"
+    with pytest.raises(UpdateWithoutWhereError) as exc_info:
+        validate_update_has_where(sql)
+    assert "WHERE clause" in str(exc_info.value)
+
+
+def test_validate_update_case_insensitive():
+    sql = "update users set name = 'John'"
+    with pytest.raises(UpdateWithoutWhereError):
+        validate_update_has_where(sql)
+
+
+def test_validate_non_update_queries():
+    queries = [
+        "SELECT * FROM users",
+        "INSERT INTO users (name) VALUES ('John')",
+        "DELETE FROM users WHERE id = 1",
+        "CREATE TABLE users (id INT)",
+    ]
+    for sql in queries:
+        validate_update_has_where(sql)
