@@ -14,8 +14,8 @@ def step_edit_file(context):
     if os.path.exists(context.editor_file_name):
         os.remove(context.editor_file_name)
     context.cli.sendline(f"\\e {os.path.basename(context.editor_file_name)}")
-    wrappers.expect_exact(context, 'Entering Ex mode.  Type "visual" to go to Normal mode.', timeout=2)
-    wrappers.expect_exact(context, "\r\n:", timeout=2)
+    wrappers.expect_exact(context, 'Entering Ex mode.  Type "visual" to go to Normal mode.', timeout=4)
+    wrappers.expect_exact(context, "\r\n:", timeout=4)
 
 
 @when('we type "{query}" in the editor')
@@ -23,13 +23,13 @@ def step_edit_type_sql(context, query):
     context.cli.sendline("i")
     context.cli.sendline(query)
     context.cli.sendline(".")
-    wrappers.expect_exact(context, "\r\n:", timeout=2)
+    wrappers.expect_exact(context, "\r\n:", timeout=4)
 
 
 @when("we exit the editor")
 def step_edit_quit(context):
     context.cli.sendline("x")
-    wrappers.expect_exact(context, "written", timeout=2)
+    wrappers.expect_exact(context, "written", timeout=4)
 
 
 @then('we see "{query}" in prompt')
@@ -54,18 +54,22 @@ def step_tee_ouptut(context):
 @when('we select "select {param}"')
 def step_query_select_number(context, param):
     context.cli.sendline(f"select {param}")
+    expected = (
+        dedent(
+            f"""
+            +{'-' * (len(param) + 2)}+\r
+            | {param} |\r
+            +{'-' * (len(param) + 2)}+\r
+            | {param} |\r
+            +{'-' * (len(param) + 2)}+
+            """
+        ).strip()
+        + '\r\n\r\n'
+    )
+
     wrappers.expect_pager(
         context,
-        dedent(
-            f"""\
-        +{'-' * (len(param) + 2)}+\r
-        | {param} |\r
-        +{'-' * (len(param) + 2)}+\r
-        | {param} |\r
-        +{'-' * (len(param) + 2)}+\r
-        \r
-        """
-        ),
+        expected,
         timeout=5,
     )
     wrappers.expect_exact(context, "1 row in set", timeout=2)

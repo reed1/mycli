@@ -1,3 +1,88 @@
+Upcoming (TBD)
+==============
+
+Internal
+--------
+* Include LLM dependencies in tox configuration.
+
+
+1.41.0 (2025/11/01)
+==============
+
+Features
+--------
+* Make LLM dependencies an optional extra.
+
+
+Bug Fixes
+--------
+* Let LLM commands respect show-timing configuration.
+
+
+Internal
+--------
+* Add mypy to Pull Request template.
+* Enable flake8-bugbear lint rules.
+* Fix flaky editor-command tests in CI.
+* Require release format of `changelog.md` when making a release.
+* Improve type annotations on LLM driver.
+
+
+1.40.0 (2025/10/14)
+==============
+
+Features
+--------
+* Support reconnecting to mysql server when the server restarts.
+
+
+Internal
+--------
+* Test on Python 3.14.
+* Switch from pyaes to pycryptodomex as it seems to be more actively maintained.
+
+
+1.39.1 (2025/10/06)
+==============
+
+Bug Fixes
+--------
+* Don't require `--ssl` argument when other SSL arguments are given.
+
+
+1.39.0 (2025/09/30)
+==============
+
+Features
+--------
+* Support only Python 3.10+.
+
+
+Bug Fixes
+--------
+* Fixes use of incorrect ssl config after retrying connection with prompted password.
+* Fix ssl_context always created.
+
+
+Internal
+--------
+Typing fix for `pymysql.connect()`.
+
+
+1.38.4 (2025/09/06)
+==============
+
+Bug Fixes
+--------
+* Limit Alt-R bindings to Emacs mode.
+* Fix timing being printed twice.
+
+
+Internal
+--------
+* Only read "my" configuration files once, rather than once per call to read_my_cnf_files.
+
+
 1.38.3 (2025/08/21)
 ==============
 
@@ -24,7 +109,7 @@ Bug Fixes
 
 Internal
 --------
-* Improve CI worflow naming.
+* Improve CI workflow naming.
 
 
 1.38.0 (2025/08/16)

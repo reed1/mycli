@@ -1,10 +1,18 @@
-from __future__ import annotations
-
 from collections import namedtuple
 from enum import Enum
 import logging
+import os
 from typing import Callable
 
+try:
+    if not os.environ.get('MYCLI_LLM_OFF'):
+        import llm  # noqa: F401
+
+        LLM_IMPORTED = True
+    else:
+        LLM_IMPORTED = False
+except ImportError:
+    LLM_IMPORTED = False
 from pymysql.cursors import Cursor
 
 logger = logging.getLogger(__name__)
@@ -59,7 +67,7 @@ def special_command(
     arg_type: ArgType = ArgType.PARSED_QUERY,
     hidden: bool = False,
     case_sensitive: bool = False,
-    aliases: list[str] = [],
+    aliases: list[str] | None = None,
 ) -> Callable:
     def wrapper(wrapped):
         register_special_command(
@@ -85,7 +93,7 @@ def register_special_command(
     arg_type: ArgType = ArgType.PARSED_QUERY,
     hidden: bool = False,
     case_sensitive: bool = False,
-    aliases: list[str] = [],
+    aliases: list[str] | None = None,
 ) -> None:
     cmd = command.lower() if not case_sensitive else command
     COMMANDS[cmd] = SpecialCommand(
@@ -97,6 +105,7 @@ def register_special_command(
         hidden=hidden,
         case_sensitive=case_sensitive,
     )
+    aliases = [] if aliases is None else aliases
     for alias in aliases:
         cmd = alias.lower() if not case_sensitive else alias
         COMMANDS[cmd] = SpecialCommand(
@@ -121,10 +130,10 @@ def execute(cur: Cursor, sql: str) -> list[tuple]:
 
     try:
         special_cmd = COMMANDS[command]
-    except KeyError:
+    except KeyError as exc:
         special_cmd = COMMANDS[command.lower()]
         if special_cmd.case_sensitive:
-            raise CommandNotFound(f'Command not found: {command}')
+            raise CommandNotFound(f'Command not found: {command}') from exc
 
     # "help <SQL KEYWORD> is a special case. We want built-in help, not
     # mycli help here.
@@ -181,3 +190,10 @@ def quit_(*_args):
 @special_command("\\G", "\\G", "Display current query results vertically.", arg_type=ArgType.NO_QUERY, case_sensitive=True)
 def stub():
     raise NotImplementedError
+
+
+if LLM_IMPORTED:
+
+    @special_command("\\llm", "\\ai", "Interrogate LLM.", arg_type=ArgType.RAW_QUERY, case_sensitive=True)
+    def llm_stub():
+        raise NotImplementedError

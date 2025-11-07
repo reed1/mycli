@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from cli_helpers.tabular_output import TabularOutputFormatter, preprocessors
 from cli_helpers.utils import strip_ansi
 import click
+from configobj import ConfigObj
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completion, DynamicCompleter
 from prompt_toolkit.document import Document
@@ -36,7 +37,7 @@ from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 from prompt_toolkit.layout.processors import ConditionalProcessor, HighlightMatchingBracketProcessor
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
-from pymysql import OperationalError
+from pymysql import OperationalError, err
 from pymysql.cursors import Cursor
 import sqlglot
 import sqlparse
@@ -173,9 +174,6 @@ class MyCli:
         self.logger = logging.getLogger(__name__)
         self.initialize_logging()
 
-        prompt_cnf = self.read_my_cnf_files(self.cnf_files, ["prompt"])["prompt"]
-        self.prompt_format = prompt or prompt_cnf or c["main"]["prompt"] or self.default_prompt
-        self.multiline_continuation_char = c["main"]["prompt_continuation"]
         keyword_casing = c["main"].get("keyword_casing", "auto")
 
         self.query_history: list[Query] = []
@@ -201,6 +199,10 @@ class MyCli:
                 # There was an error reading the login path file.
                 print("Error: Unable to read login path file.")
 
+        self.my_cnf = read_config_files(self.cnf_files, list_values=False)
+        prompt_cnf = self.read_my_cnf(self.my_cnf, ["prompt"])["prompt"]
+        self.prompt_format = prompt or prompt_cnf or c["main"]["prompt"] or self.default_prompt
+        self.multiline_continuation_char = c["main"]["prompt_continuation"]
         self.prompt_app = None
 
     def register_special_commands(self) -> None:
@@ -340,14 +342,13 @@ class MyCli:
         root_logger.debug("Initializing mycli logging.")
         root_logger.debug("Log file %r.", log_file)
 
-    def read_my_cnf_files(self, files: list[str | TextIOWrapper], keys: list[str]) -> dict[str, Any]:
+    def read_my_cnf(self, cnf: ConfigObj, keys: list[str]) -> dict[str, Any]:
         """
-        Reads a list of config files and merges them. The last one will win.
-        :param files: list of files to read
+        Retrieves some keys from a configuration, applies transformations, returns a new configuration.
+        :param cnf: configuration to read
         :param keys: list of keys to retrieve
         :returns: tuple, with None for missing keys.
         """
-        cnf = read_config_files(files, list_values=False)
 
         sections = ["client", "mysqld"]
         key_transformations = {
@@ -407,7 +408,7 @@ class MyCli:
         socket: str | None = "",
         charset: str | None = "",
         local_infile: bool = False,
-        ssl: dict[str, Any] | None = {},
+        ssl: dict[str, Any] | None = None,
         ssh_user: str | None = "",
         ssh_host: str | None = "",
         ssh_port: int = 22,
@@ -434,7 +435,7 @@ class MyCli:
             "ssl-verify-server-cert": None,
         }
 
-        cnf = self.read_my_cnf_files(self.cnf_files, list(cnf.keys()))
+        cnf = self.read_my_cnf(self.my_cnf, list(cnf.keys()))
 
         # Fall back to config values only if user did not specify a value.
         database = database or cnf["database"]
@@ -509,7 +510,7 @@ class MyCli:
                         socket,
                         charset,
                         use_local_infile,
-                        ssl_config,
+                        ssl_config_or_none,
                         ssh_user,
                         ssh_host,
                         int(ssh_port) if ssh_port else None,
@@ -807,7 +808,8 @@ class MyCli:
                             click.echo("LLM Response:")
                             click.echo(context)
                             click.echo("---")
-                        click.echo(f"Time: {duration:.2f} seconds")
+                        if special.is_timing_enabled():
+                            click.echo(f"Time: {duration:.2f} seconds")
                         text = self.prompt_app.prompt(default=sql or '')
                     except KeyboardInterrupt:
                         return
@@ -868,6 +870,19 @@ class MyCli:
                 output_res(res, start)
                 special.unset_once_if_written(self.post_redirect_command)
                 special.flush_pipe_once_if_written(self.post_redirect_command)
+            except err.InterfaceError:
+                logger.debug("Attempting to reconnect.")
+                self.echo("Reconnecting...", fg="yellow")
+                try:
+                    sqlexecute.connect()
+                    logger.debug("Reconnected successfully.")
+                    one_iteration(text)
+                    return  # OK to just return, cuz the recursion call runs to the end.
+                except OperationalError as e2:
+                    logger.debug("Reconnect failed. e: %r", e2)
+                    self.echo(str(e2), err=True, fg="red")
+                    # If reconnection failed, don't proceed further.
+                    return
             except EOFError as e:
                 raise e
             except KeyboardInterrupt:
@@ -879,7 +894,7 @@ class MyCli:
                     # Restart connection to the database
                     sqlexecute.connect()
                     try:
-                        for title, cur, headers, status in sqlexecute.run(f"kill {connection_id_to_kill}"):
+                        for _title, _cur, _headers, status in sqlexecute.run(f"kill {connection_id_to_kill}"):
                             status_str = str(status).lower()
                             if status_str.find("ok") > -1:
                                 logger.debug("cancelled query, connection id: %r, sql: %r", connection_id_to_kill, text)
@@ -1092,7 +1107,7 @@ class MyCli:
         if not os.environ.get("LESS"):
             os.environ["LESS"] = "-RXF"
 
-        cnf = self.read_my_cnf_files(self.cnf_files, ["pager", "skip-pager"])
+        cnf = self.read_my_cnf(self.my_cnf, ["pager", "skip-pager"])
         cnf_pager = cnf["pager"] or self.config["main"]["pager"]
 
         # help Windows users who haven't edited the default myclirc

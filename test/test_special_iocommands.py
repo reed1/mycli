@@ -51,9 +51,8 @@ def test_editor_command():
 
     os.environ["EDITOR"] = "true"
     os.environ["VISUAL"] = "true"
-    # Set the editor to Notepad on Windows
     if os.name != "nt":
-        mycli.packages.special.open_external_editor(sql=r"select 1") == "select 1"
+        assert mycli.packages.special.open_external_editor(sql=r"select 1") == ('select 1', None)
     else:
         pytest.skip("Skipping on Windows platform.")
 
@@ -223,7 +222,7 @@ def test_watch_query_full():
     expected_value = "1"
     query = f"SELECT {expected_value}"
     expected_title = f"> {query}"
-    expected_results = [4, 5]
+    expected_results = [4, 5, 6, 7]  # Python 3.14 is skipping ahead to 6 or 7
     ctrl_c_process = send_ctrl_c(wait_interval)
     with db_connection().cursor() as cur:
         results = list(mycli.packages.special.iocommands.watch_query(arg=f"{watch_seconds} {query}", cur=cur))
