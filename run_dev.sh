@@ -10,7 +10,7 @@ cat <<EOF > "$temp_dir/mycli"
 #!/bin/bash
 
 cd "$script_dir"
-python -m mycli.main "\$@"
+uv run mycli "\$@"
 EOF
 
 chmod +x "$temp_dir/mycli"

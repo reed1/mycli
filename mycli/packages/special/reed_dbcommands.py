@@ -441,9 +441,8 @@ def show_create_table(cur, arg=None, **_):
     content = rows[0][ct_idx]
     with open("/tmp/sct_query.sql", "w") as f:
         f.write(content)
-    cmd = "exec --no-startup-id rterm-float -e show-sql /tmp/sct_query.sql"
     subprocess.run(
-        ["i3-msg", cmd],
+        ["kitty", "@", "launch", "--type=overlay", "show-sql", "/tmp/sct_query.sql"],
         check=True,
         stderr=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
