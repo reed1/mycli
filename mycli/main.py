@@ -19,7 +19,7 @@ from datetime import datetime
 from importlib import resources
 import itertools
 from random import choice
-from time import time
+from time import time, sleep
 from urllib.parse import parse_qs, unquote, urlparse
 
 from cli_helpers.tabular_output import TabularOutputFormatter, preprocessors
@@ -961,6 +961,11 @@ class MyCli:
                 editing_mode = EditingMode.VI
             else:
                 editing_mode = EditingMode.EMACS
+
+            # Small delay when using SSH tunnel to let background threads settle
+            # Prevents terminal corruption when prompt_toolkit probes terminal capabilities
+            if self.sqlexecute.ssh_host:
+                sleep(0.5)
 
             self.prompt_app = PromptSession(
                 lexer=PygmentsLexer(MyCliLexer),
