@@ -405,9 +405,10 @@ ignore 1 lines"""
 )
 def truncate_table(cur, arg=None, **_):
     tables = re.split(r"\s+", arg)
-    queries = "; ".join([f"truncate table {table}" for table in tables])
-    log.debug(queries)
-    cur.execute(queries)
+    for table in tables:
+        query = f"truncate table {table}"
+        log.debug(query)
+        cur.execute(query)
     status_message = f"Truncated {len(tables)} table(s) successfully"
     return [(None, None, None, status_message)]
 
