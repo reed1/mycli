@@ -398,17 +398,17 @@ ignore 1 lines"""
 
 @special_command(
     "\\tc",
-    "\\tc [table]",
+    "\\tc [table...]",
     "Truncate table",
     arg_type=ArgType.PARSED_QUERY,
     case_sensitive=True,
 )
 def truncate_table(cur, arg=None, **_):
-    [table, *args] = re.split(r"\s+", arg)
-    query = f"truncate table {table}"
-    log.debug(query)
-    cur.execute(query)
-    status_message = f"Table {table} truncated successfully"
+    tables = re.split(r"\s+", arg)
+    queries = "; ".join([f"truncate table {table}" for table in tables])
+    log.debug(queries)
+    cur.execute(queries)
+    status_message = f"Truncated {len(tables)} table(s) successfully"
     return [(None, None, None, status_message)]
 
 
