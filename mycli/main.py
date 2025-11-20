@@ -61,7 +61,7 @@ from mycli.packages.special.main import ArgType
 from mycli.packages.tabular_output import sql_format
 from mycli.packages.toolkit.history import FileHistoryWithTimestamp
 from mycli.sqlcompleter import SQLCompleter
-from mycli.sqlexecute import ERROR_CODE_ACCESS_DENIED, FIELD_TYPES, SQLExecute
+from mycli.sqlexecute import ERROR_CODE_ACCESS_DENIED, ERROR_CODE_UNKNOWN_DATABASE, FIELD_TYPES, SQLExecute
 
 try:
     import paramiko
@@ -518,6 +518,11 @@ class MyCli:
                         ssh_key_filename,
                         init_command,
                     )
+                elif e.args[0] == ERROR_CODE_UNKNOWN_DATABASE:
+                    dbconfig_id = os.environ.get("DBCONFIG_ID")
+                    cache_file = os.path.expanduser(f"~/.cache/rlocal/db/{dbconfig_id}.last_schema")
+                    self.echo(f"Probably clear the last schema? {cache_file}", err=True, fg="yellow")
+                    raise e
                 else:
                     raise e
 

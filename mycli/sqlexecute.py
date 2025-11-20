@@ -31,6 +31,7 @@ FIELD_TYPES.update({FIELD_TYPE.NULL: type(None)})
 
 
 ERROR_CODE_ACCESS_DENIED = 1045
+ERROR_CODE_UNKNOWN_DATABASE = 1049
 
 
 class UpdateWithoutWhereError(Exception):
