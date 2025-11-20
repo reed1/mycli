@@ -397,6 +397,22 @@ ignore 1 lines"""
 
 
 @special_command(
+    "\\tc",
+    "\\tc [table]",
+    "Truncate table",
+    arg_type=ArgType.PARSED_QUERY,
+    case_sensitive=True,
+)
+def truncate_table(cur, arg=None, **_):
+    [table, *args] = re.split(r"\s+", arg)
+    query = f"truncate table {table}"
+    log.debug(query)
+    cur.execute(query)
+    status_message = f"Table {table} truncated successfully"
+    return [(None, None, None, status_message)]
+
+
+@special_command(
     "\\ss",
     "\\ss[+] [schema]",
     "Select schema",
@@ -505,6 +521,7 @@ def is_reed_command(cmd):
         "\\gcol",
         "\\dc",
         "\\lt",
+        "\\tc",
         "\\ss",
         "\\sct",
         "\\df",
@@ -518,6 +535,9 @@ def reed_suggestions(cmd, arg):
         if cmd == "\\ss":
             # For schema selection, suggest schemas instead of tables
             return [{"type": "schema"}]
+        elif cmd == "\\df":
+            # For directed format, suggest recipe options
+            return [{"text": "A"}, {"text": "C"}]
         else:
             # For other commands, suggest tables
             return [{"type": "table", "schema": []}, {"type": "schema"}]
@@ -551,7 +571,7 @@ def reed_suggestions(cmd, arg):
                 return [{"type": "column", "tables": [table_tuple]}]
 
         # For commands that take table + additional arguments (but not columns)
-        elif cmd in ("\\do", "\\du", "\\dd", "\\ddr", "\\dk", "\\tree"):
+        elif cmd in ("\\do", "\\du", "\\dd", "\\ddr", "\\dk", "\\tree", "\\tc"):
             # These commands take table name + other args, but we don't complete the other args
             # So return empty suggestions for additional arguments
             return []

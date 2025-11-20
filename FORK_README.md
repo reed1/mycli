@@ -39,6 +39,7 @@ Commands for working with tables that have parent-child relationships (using `id
   - File path must be in single quotes
   - CSV format with header row expected
   - Example: `\lt '/tmp/data.csv' users`
+- **`\tc [table]`** - Truncate table
 
 ### Output Formatting
 
