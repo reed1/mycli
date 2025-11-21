@@ -291,10 +291,7 @@ def tree(cur, arg=None, **_):
         )
         select
             depth,
-            concat(
-                repeat('*', depth),
-                case when depth > 0 then ' ' else '' end,
-                level) as level,
+            level,
             count(*) as cnt
         from cte
         group by depth, level
@@ -304,9 +301,60 @@ def tree(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        rows = list(cur.fetchall())
+        formatted_rows = _format_tree_rows(rows)
+        return [(None, formatted_rows, headers, "")]
     else:
         return [(None, None, None, "")]
+
+
+def _format_tree_rows(rows):
+    """Format tree rows with box-drawing characters."""
+    if not rows:
+        return rows
+
+    result = []
+    # Track which depth levels have more siblings coming
+    has_more_at_depth = {}
+
+    for i, row in enumerate(rows):
+        depth, level, cnt = row
+
+        # Look ahead to determine if this is the last child at this depth
+        is_last = True
+        for j in range(i + 1, len(rows)):
+            future_depth = rows[j][0]
+            if future_depth < depth:
+                break
+            if future_depth == depth:
+                is_last = False
+                break
+
+        # Update tracking for this depth
+        has_more_at_depth[depth] = not is_last
+
+        # Build the prefix
+        if depth == 0:
+            prefix = ""
+        else:
+            parts = []
+            # Add continuation lines for ancestors
+            for d in range(1, depth):
+                if has_more_at_depth.get(d, False):
+                    parts.append("│  ")
+                else:
+                    parts.append("   ")
+            # Add branch for current node
+            if is_last:
+                parts.append("└─ ")
+            else:
+                parts.append("├─ ")
+            prefix = "".join(parts)
+
+        formatted_level = prefix + level
+        result.append((depth, formatted_level, cnt))
+
+    return result
 
 
 @special_command(
