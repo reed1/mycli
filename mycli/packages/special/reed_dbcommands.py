@@ -371,6 +371,54 @@ def _build_and_format_tree(rows):
 
 
 @special_command(
+    "\\it",
+    "\\it <pattern>",
+    "Search tables by name pattern",
+    arg_type=ArgType.PARSED_QUERY,
+    case_sensitive=True,
+)
+def info_tables(cur, arg=None, **_):
+    pattern = arg.strip() if arg else "%"
+    if pattern.isalnum():
+        pattern = f"%{pattern}%"
+    else:
+        pattern = pattern.replace("*", "%")
+    query = f"select * from information_schema.tables where table_name like '{pattern}'"
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
+@special_command(
+    "\\ic",
+    "\\ic <pattern>",
+    "Search columns by name pattern",
+    arg_type=ArgType.PARSED_QUERY,
+    case_sensitive=True,
+)
+def info_columns(cur, arg=None, **_):
+    pattern = arg.strip() if arg else "%"
+    if pattern.isalnum():
+        pattern = f"%{pattern}%"
+    else:
+        pattern = pattern.replace("*", "%")
+    query = (
+        f"select * from information_schema.columns where column_name like '{pattern}'"
+    )
+    log.debug(query)
+    cur.execute(query)
+    if cur.description:
+        headers = [x[0] for x in cur.description]
+        return [(None, cur, headers, "")]
+    else:
+        return [(None, None, None, "")]
+
+
+@special_command(
     "\\gcol",
     "\\gcol <table>",
     "Get columns",
@@ -580,6 +628,8 @@ def is_reed_command(cmd):
         "\\ddr",
         "\\dk",
         "\\tree",
+        "\\it",
+        "\\ic",
         "\\gcol",
         "\\dc",
         "\\lt",
