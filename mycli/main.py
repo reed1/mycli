@@ -62,6 +62,7 @@ from mycli.packages.tabular_output import sql_format
 from mycli.packages.toolkit.history import FileHistoryWithTimestamp
 from mycli.sqlcompleter import SQLCompleter
 from mycli.sqlexecute import ERROR_CODE_ACCESS_DENIED, ERROR_CODE_UNKNOWN_DATABASE, FIELD_TYPES, SQLExecute
+from mycli.reed_watch import handle_watch_command
 
 try:
     import paramiko
@@ -832,6 +833,9 @@ class MyCli:
             text = text.strip()
 
             if not text:
+                return
+
+            if handle_watch_command(self, text):
                 return
 
             if is_redirect_command(text):
