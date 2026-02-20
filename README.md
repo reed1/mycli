@@ -50,20 +50,26 @@ Features
 
 * Auto-completion as you type for SQL keywords as well as tables, views and
   columns in the database.
+* Fuzzy history search using [fzf](https://github.com/junegunn/fzf).
 * Syntax highlighting using Pygments.
 * Smart-completion (enabled by default) will suggest context-sensitive completion.
     - `SELECT * FROM <tab>` will only show table names.
     - `SELECT * FROM users WHERE <tab>` will only show column names.
 * Support for multiline queries.
 * Favorite queries with optional positional parameters. Save a query using
-  `\fs alias query` and execute it with `\f alias` whenever you need.
+  `\fs <alias> <query>` and execute it with `\f <alias>`.
 * Timing of sql statements and table rendering.
-* Config file is automatically created at ``~/.myclirc`` at first launch.
 * Log every query and its results to a file (disabled by default).
-* Pretty prints tabular data (with colors!)
+* Pretty print tabular data (with colors!).
 * Support for SSL connections
 * Shell-style trailing redirects with `$>`, `$>>` and `$|` operators.
-* Some features are only exposed as [key bindings](doc/key_bindings.rst)
+* Support for querying LLMs with context derived from your schema.
+* Support for storing passwords in the system keyring.
+
+Mycli creates a config file `~/.myclirc` on first run; you can use the
+options in that file to configure the above features, and more.
+
+Some features are only exposed as [key bindings](doc/key_bindings.rst).
 
 Contributions:
 --------------
@@ -105,7 +111,21 @@ sudo dnf install mycli
 
 ### Windows
 
+#### Option 1: Native Windows
+
+Install the `less` pager, for example by `scoop install less`.
+
 Follow the instructions on this blogpost: http://web.archive.org/web/20221006045208/https://www.codewall.co.uk/installing-using-mycli-on-windows/
+
+**Mycli is not tested on Windows**, but the libraries used in the app are Windows-compatible.
+This means it should work without any modifications, but isn't supported.
+
+PRs to add native Windows testing to Mycli CI would be welcome!
+
+#### Option 2: WSL
+
+Everything should work as expected in WSL.  This is a good option for using
+Mycli on Windows.
 
 
 ### Thanks:
@@ -128,9 +148,14 @@ Thanks to [PyMysql](https://github.com/PyMySQL/PyMySQL) for a pure python adapte
 
 Mycli is tested on macOS and Linux, and requires Python 3.10 or better.
 
-**Mycli is not tested on Windows**, but the libraries used in this app are Windows-compatible.
-This means it should work without any modifications. If you're unable to run it
-on Windows, please [file a bug](https://github.com/dbcli/mycli/issues/new).
+To connect to MySQL versions earlier than 5.5, you may need to set the following in `~/.myclirc`:
+
+```
+# character set for connections without --charset being set at the CLI
+default_character_set = utf8
+```
+
+or set `--charset=utf8` when invoking MyCLI.
 
 ### Configuration and Usage
 

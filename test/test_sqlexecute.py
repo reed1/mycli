@@ -1,5 +1,6 @@
 # type: ignore
 
+from datetime import time
 import os
 
 import pymysql
@@ -23,6 +24,36 @@ def assert_result_equal(result, title=None, rows=None, headers=None, status=None
     else:
         # Do an exact match on the fields.
         assert result == [fields]
+
+
+@dbtest
+def test_timediff_negative_value(executor):
+    sql = "select timediff('2020-11-11 01:01:01', '2020-11-11 01:02:01')"
+    result = run(executor, sql)
+    # negative value comes back as str
+    assert result[0]["rows"][0][0] == "-00:01:00"
+
+
+@dbtest
+def test_timediff_positive_value(executor):
+    sql = "select timediff('2020-11-11 01:02:01', '2020-11-11 01:01:01')"
+    result = run(executor, sql)
+    # positive value comes back as datetime.time
+    assert result[0]["rows"][0][0] == time(0, 1)
+
+
+@dbtest
+def test_get_result_status_without_warning(executor):
+    sql = "select 1"
+    result = run(executor, sql)
+    assert result[0]["status"] == "1 row in set"
+
+
+@dbtest
+def test_get_result_status_with_warning(executor):
+    sql = "SELECT 1 + '0 foo'"
+    result = run(executor, sql)
+    assert result[0]["status"] == "1 row in set, 1 warning"
 
 
 @dbtest

@@ -16,11 +16,19 @@ def list_path(root_dir: str) -> list[str]:
     :return: list
 
     """
-    res = []
-    if os.path.isdir(root_dir):
-        for name in os.listdir(root_dir):
-            res.append(name)
-    return res
+    files = []
+    dirs = []
+    if not os.path.isdir(root_dir):
+        return []
+    for name in sorted(os.listdir(root_dir)):
+        if name.startswith('.'):
+            continue
+        elif os.path.isdir(name):
+            dirs.append(f'{name}/')
+        # if .sql is too restrictive it can be made configurable with some effort
+        elif name.lower().endswith('.sql'):
+            files.append(name)
+    return files + dirs
 
 
 def complete_path(curr_dir: str, last_dir: str) -> str:
@@ -69,7 +77,16 @@ def suggest_path(root_dir: str) -> list[str]:
 
     """
     if not root_dir:
-        return [os.path.abspath(os.sep), "~", os.curdir, os.pardir]
+        return [
+            os.path.abspath(os.sep),
+            "~",
+            os.curdir,
+            os.pardir,
+            *list_path(os.curdir),
+        ]
+
+    if root_dir[0] not in ('/', '~') and root_dir[0:1] != './':
+        return list_path(os.curdir)
 
     if "~" in root_dir:
         root_dir = os.path.expanduser(root_dir)

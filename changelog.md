@@ -1,5 +1,353 @@
-Upcoming (TBD)
+1.55.0 (2026/02/20)
 ==============
+
+Features
+---------
+* `--checkup` now checks for external executables.
+
+
+Bug Fixes
+---------
+* Improve completion suggestions within backticks.
+* Watch command now returns correct time when run as part of a multi-part query (#1565).
+* Don't diagnose free-entry sections such as `[favorite_queries]` in `--checkup`.
+* When accepting a filename completion, fill in leading `./` if given.
+
+
+Internal
+--------
+* Bump `cli_helpers` to non-yanked version.
+
+
+1.54.1 (2026/02/17)
+==============
+
+Bug Fixes
+--------
+* Don't offer autocomplete suggestions when the cursor is within a string.
+* Catch `getpwuid` error on unknown socket owner.
+
+
+Internal
+--------
+* Tune Codex reviews.
+* Refactor `is_inside_quotes()` detection.
+
+
+1.54.0 (2026/02/16)
+==============
+
+Features
+--------
+* Add many CLI flags to startup tips.
+* Accept all special commands without trailing semicolons in multi-line mode.
+* Add prompt format strings for socket connections.
+* Optionally defer auto-completions until a minimum number of characters is typed.
+* Make the completion interface more responsive using a background thread.
+* Option to suppress control-d exit behavior.
+* Better support Truecolor terminals.
+* Ability to send app-layer keepalive pings to the server.
+* Add `WITH`, `EXPLAIN`, and `LEFT JOIN` to favorite keyword suggestions.
+* Let the Escape key cancel completion popups.
+
+
+Bug Fixes
+---------
+* Correct parameterization for completion queries.
+* Grammar nits in help display.
+
+
+Internal
+--------
+* Prefer `yield from` over yielding in a loop.
+* Update `ruff` linter and CI.
+* Update `LICENSE.txt` for dates and GitHub detection.
+* Update key feature list in `README.md`, syncing with web.
+* Sync prompt format string commentary with web.
+* Add a GitHub Actions workflow to run Codex review on pull requests.
+* Remove vim-style exit sequence which had no effect.
+* Pin dependencies more tightly in `pyproject.toml`.
+* Exclude more documentation files from CI.
+
+
+1.53.0 (2026/02/12)
+==============
+
+Features
+--------
+* Add all `~/.myclirc` entries/sections to startup tips.
+
+
+Bug Fixes
+---------
+* Fix `\dt+ table_name` returning empty results.
+* Further bulletproof generating completions on stored procedures.
+
+
+Internal
+--------
+* Add GitHub Issue templates.
+
+
+1.52.0 (2026/02/11)
+==============
+
+Features
+--------
+* Suggest tables/views that contain the given columns first when provided in a SELECT query.
+
+
+Bug Fixes
+--------
+* Reduce duplicated `--checkup` output.
+* Handle errors generating completions on stored procedures.
+* Fix whitespace/inline comments breaking destructive `UPDATE … WHERE` statement detection.
+
+
+Internal
+--------
+* Let CI ignore additional documentation files.
+* Upgrade `cli_helpers` library to v2.10.0.
+* Organize startup tips.
+
+
+1.51.1 (2026/02/09)
+==============
+
+Features
+--------
+* Options to limit size of LLM prompts; cache LLM prompt data.
+* Add startup usage tips.
+* Move `main.ssl_mode` config option to `connection.default_ssl_mode`.
+* Add "unsupported" and "deprecated" `--checkup` sections.
+
+
+Bug Fixes
+--------
+* Correct mangled schema info sent in LLM prompts.
+* Give destructive warning on multi-table `UPDATE`s.
+
+
+1.50.0 (2026/02/07)
+==============
+
+Features
+--------
+* Deprecate reading configuration values from `my.cnf` files.
+* Add `--checkup` mode to show unconfigured new features.
+* Add `binary_display` configuration option.
+
+
+Bug Fixes
+--------
+* Link to `--ssl`/`--no-ssl` GitHub issue in deprecation warning.
+* Don't emit keyring-updated message unless needed.
+* Include port and socket in keyring identifier.
+
+
+1.49.0 (2026/02/02)
+==============
+
+Features
+--------
+* "Eager" completions for the `source` command, limited to `*.sql` files.
+* Suggest column names from all tables in the current database after SELECT (#212).
+* Put fuzzy completions more often to the bottom of the suggestion list.
+* Store and retrieve passwords using the system keyring.
+
+
+Bug Fixes
+--------
+* Refactor completions for special commands, with minor casing fixes.
+* Raise `--password-file` higher in the precedence of password specification.
+* Fix regression: show username in password prompt.
+
+
+Internal
+--------
+* Remove `align_decimals` preprocessor, which had no effect.
+* Fix TLS deprecation warning in test suite.
+* Convert importlib read_text and open_text uses to newer files() syntax.
+* Update Pull Request template.
+
+
+1.48.0 (2026/01/27)
+==============
+
+Features
+--------
+* Right-align numeric columns, and make the behavior configurable.
+* Add completions for stored procedures.
+* Escape database completions.
+* Offer completions on `CREATE TABLE ... LIKE`.
+* Use 0x-style hex literals for binaries in SQL output formats.
+
+
+Bug Fixes
+--------
+* Better respect case when `keyword_casing` is `auto`.
+* Fix error when selecting from an empty table.
+* Let favorite queries contain special commands.
+* Render binary values more consistently as hex literals.
+* Offer format completions on special command `\Tr`/`redirectformat`.
+
+
+1.47.0 (2026/01/24)
+==============
+
+Features
+--------
+* Add a `--checkpoint=` argument to log successful queries in batch mode.
+* Add `--throttle` option for batch mode.
+
+
+Bug Fixes
+--------
+* Fix timediff output when the result is a negative value (#1113).
+* Don't offer completions for numeric text.
+
+
+1.46.0 (2026/01/22)
+==============
+
+Features
+--------
+* Add `--unbuffered` mode which fetches rows as needed, to save memory.
+* Default to standards-compliant `utf8mb4` character set.
+* Stream input from STDIN to consume less memory, adding `--noninteractive` and `--format=` CLI arguments.
+* Remove suggested quoting on completions for identifiers with uppercase.
+* Allow table names to be completed with leading schema names.
+* Soft deprecate the built-in SSH features.
+* Add true fuzzy-match completions with rapidfuzz.
+
+
+Bug Fixes
+--------
+* Fix CamelCase fuzzy matching.
+* Place special commands first in the list of completion candidates, and remove duplicates.
+
+
+1.45.0 (2026/01/20)
+==============
+
+Features
+--------
+* Make password options also function as flags. Reworked password logic to prompt user as early as possible (#341).
+* More complete and up-to-date set of MySQL reserved words for completions.
+* Place exact-leading completions first.
+* Allow history file location to be configured.
+* Make destructive-warning keywords configurable.
+* Smarter fuzzy completion matches.
+
+
+Bug Fixes
+--------
+* Respect `--logfile` when using `--execute` or standard input at the shell CLI.
+* Gracefully catch Paramiko parsing errors on `--list-ssh-config`.
+* Downgrade to Paramiko 3.5.1 to avoid crashing on DSA SSH keys.
+* Offer schema name completions in `GRANT ... ON` forms.
+
+
+1.44.2 (2026/01/13)
+==============
+
+Bug Fixes
+--------
+* Update watch query output to display the correct execution time on all iterations (#763).
+* Use correct database (if applicable) when reconnecting after a connection loss (#1437).
+
+Internal
+--------
+* Create new data class to handle SQL/command results to make further code improvements easier.
+
+
+1.44.1 (2026/01/10)
+==============
+
+Bug Fixes
+--------
+* Let `sqlparse` accept arbitrarily-large queries.
+
+
+1.44.0 (2026/01/08)
+==============
+
+Features
+--------
+* Add enum value completions for WHERE/HAVING clauses. (#790)
+* Add `show_favorite_query` config option to control query printing when running favorite queries. (#1118)
+
+
+1.43.1 (2026/01/03)
+==============
+
+Bug Fixes
+--------
+* Prompt for password within SSL-auto retry flow.
+
+
+1.43.0 (2026/01/02)
+==============
+
+Features
+--------
+* Update query processing functions to allow automatic show_warnings to work for more code paths like DDL.
+* Add new ssl_mode config / --ssl-mode CLI option to control SSL connection behavior. This setting will supercede the
+  existing --ssl/--no-ssl CLI options, which are deprecated and will be removed in a future release.
+* Rework reconnect logic to actually reconnect or create a new connection instead of simply changing the database (#746).
+* Configurable string for missing values (NULLs) in outputs.
+
+
+Bug Fixes
+--------
+* Update the prompt display logic to handle an edge case where a socket is used without
+  a host being parsed from any other method (#707).
+
+
+Internal
+--------
+* Refine documentation for Windows.
+* Target Python 3.10 for linting.
+* Use fully-qualified pymysql exception classes.
+
+
+1.42.0 (2025/12/20)
+==============
+
+Features
+--------
+* Add support for the automatic displaying of warnings after a SQL statement is executed.
+  May be set with the commands \W and \w, in the config file with show_warnings, or
+  with --show-warnings/--no-show-warnings on the command line.
+
+
+Internal
+--------
+* Improve robustness for flaky tests when publishing.
+* Improve type annotations for latest mypy/type stubs.
+* Set mypy version more strictly.
+
+
+1.41.2 (2025/11/24)
+==============
+
+Bug Fixes
+--------
+* Close connection to server properly to avoid "Aborted connection" warnings in server logs.
+
+Internal
+--------
+* Add ruff to developement dependencies.
+* Update contributing guidelines to match GitHub pull request checklist.
+
+
+1.41.1 (2025/11/15)
+==============
+
+Bug Fixes
+--------
+* Upgrade `click` to v8.3.1, resolving a longstanding pager bug.
+
 
 Internal
 --------

@@ -2,7 +2,12 @@
 
 import pytest
 
-from mycli.packages.completion_engine import suggest_type
+from mycli.packages import special
+from mycli.packages.completion_engine import (
+    _find_doubled_backticks,
+    is_inside_quotes,
+    suggest_type,
+)
 
 
 def sorted_dicts(dicts):
@@ -35,7 +40,6 @@ def test_select_suggests_cols_with_qualified_table_scope():
     [
         "SELECT * FROM tabl WHERE ",
         "SELECT * FROM tabl WHERE (",
-        "SELECT * FROM tabl WHERE foo = ",
         "SELECT * FROM tabl WHERE bar OR ",
         "SELECT * FROM tabl WHERE foo = 1 AND ",
         "SELECT * FROM tabl WHERE (bar > 10 AND ",
@@ -48,6 +52,18 @@ def test_select_suggests_cols_with_qualified_table_scope():
 def test_where_suggests_columns_functions(expression):
     suggestions = suggest_type(expression, expression)
     assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "alias", "aliases": ["tabl"]},
+        {"type": "column", "tables": [(None, "tabl", None)]},
+        {"type": "function", "schema": []},
+        {"type": "keyword"},
+    ])
+
+
+def test_where_equals_suggests_enum_values_first():
+    expression = "SELECT * FROM tabl WHERE foo = "
+    suggestions = suggest_type(expression, expression)
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "enum_value", "tables": [(None, "tabl", None)], "column": "foo", "parent": None},
         {"type": "alias", "aliases": ["tabl"]},
         {"type": "column", "tables": [(None, "tabl", None)]},
         {"type": "function", "schema": []},
@@ -123,7 +139,11 @@ def test_select_suggests_cols_and_funcs():
 )
 def test_expression_suggests_tables_views_and_schemas(expression):
     suggestions = suggest_type(expression, expression)
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+        {"type": "database"},
+    ])
 
 
 @pytest.mark.parametrize(
@@ -141,17 +161,25 @@ def test_expression_suggests_tables_views_and_schemas(expression):
 )
 def test_expression_suggests_qualified_tables_views_and_schemas(expression):
     suggestions = suggest_type(expression, expression)
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": "sch"}, {"type": "view", "schema": "sch"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": "sch"},
+        {"type": "view", "schema": "sch"},
+    ])
 
 
 def test_truncate_suggests_tables_and_schemas():
     suggestions = suggest_type("TRUNCATE ", "TRUNCATE ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": []},
+        {"type": "database"},
+    ])
 
 
 def test_truncate_suggests_qualified_tables():
     suggestions = suggest_type("TRUNCATE sch.", "TRUNCATE sch.")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": "sch"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": "sch"},
+    ])
 
 
 def test_distinct_suggests_cols():
@@ -171,12 +199,20 @@ def test_col_comma_suggests_cols():
 
 def test_table_comma_suggests_tables_and_schemas():
     suggestions = suggest_type("SELECT a, b FROM tbl1, ", "SELECT a, b FROM tbl1, ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
 
 def test_into_suggests_tables_and_schemas():
     suggestion = suggest_type("INSERT INTO ", "INSERT INTO ")
-    assert sorted_dicts(suggestion) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestion) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
 
 def test_insert_into_lparen_suggests_cols():
@@ -282,7 +318,11 @@ def test_outer_table_reference_in_exists_subquery_suggests_columns():
 )
 def test_sub_select_table_name_completion(expression):
     suggestion = suggest_type(expression, expression)
-    assert sorted_dicts(suggestion) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestion) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
 
 def test_sub_select_col_name_completion():
@@ -319,7 +359,11 @@ def test_sub_select_dot_col_name_completion():
 def test_join_suggests_tables_and_schemas(tbl_alias, join_type):
     text = f"SELECT * FROM abc {tbl_alias} {join_type} JOIN "
     suggestion = suggest_type(text, text)
-    assert sorted_dicts(suggestion) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestion) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
 
 @pytest.mark.parametrize(
@@ -429,7 +473,11 @@ def test_two_join_alias_dot_suggests_cols1(sql):
 
 def test_2_statements_2nd_current():
     suggestions = suggest_type("select * from a; select * from ", "select * from a; select * from ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+        {"type": "database"},
+    ])
 
     suggestions = suggest_type("select * from a; select  from b", "select * from a; select ")
     assert sorted_dicts(suggestions) == sorted_dicts([
@@ -441,12 +489,20 @@ def test_2_statements_2nd_current():
 
     # Should work even if first statement is invalid
     suggestions = suggest_type("select * from; select * from ", "select * from; select * from ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+        {"type": "database"},
+    ])
 
 
 def test_2_statements_1st_current():
     suggestions = suggest_type("select * from ; select * from b", "select * from ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
     suggestions = suggest_type("select  from a; select * from b", "select ")
     assert sorted_dicts(suggestions) == sorted_dicts([
@@ -459,7 +515,11 @@ def test_2_statements_1st_current():
 
 def test_3_statements_2nd_current():
     suggestions = suggest_type("select * from a; select * from ; select * from c", "select * from a; select * from ")
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
     suggestions = suggest_type("select * from a; select  from b; select * from c", "select * from a; select ")
     assert sorted_dicts(suggestions) == sorted_dicts([
@@ -481,6 +541,13 @@ def test_specials_included_for_initial_completion(initial_text):
     suggestions = suggest_type(initial_text, initial_text)
 
     assert sorted_dicts(suggestions) == sorted_dicts([{"type": "keyword"}, {"type": "special"}])
+
+
+@pytest.mark.parametrize('initial_text', ['REDIRECT'])
+def test_specials_included_with_caps(initial_text):
+    suggestions = suggest_type(initial_text, initial_text)
+
+    assert sorted_dicts(suggestions) == sorted_dicts([{'type': 'keyword'}, {'type': 'special'}])
 
 
 def test_specials_not_included_after_initial_token():
@@ -505,7 +572,11 @@ def test_handle_pre_completion_comma_gracefully(text):
 def test_cross_join():
     text = "select * from v1 cross join v2 JOIN v1.id, "
     suggestions = suggest_type(text, text)
-    assert sorted_dicts(suggestions) == sorted_dicts([{"type": "table", "schema": []}, {"type": "view", "schema": []}, {"type": "schema"}])
+    assert sorted_dicts(suggestions) == sorted_dicts([
+        {"type": "database"},
+        {"type": "table", "schema": []},
+        {"type": "view", "schema": []},
+    ])
 
 
 @pytest.mark.parametrize(
@@ -534,6 +605,8 @@ def test_after_as(expression):
     ],
 )
 def test_source_is_file(expression):
+    # "source" has to be registered by hand because that usually happens inside MyCLI in mycli/main.py
+    special.register_special_command(..., 'source', '\\. filename', 'Execute commands from file.', aliases=['\\.'])
     suggestions = suggest_type(expression, expression)
     assert suggestions == [{"type": "file_name"}]
 
@@ -559,3 +632,81 @@ def test_quoted_where():
     text = "'where i=';"
     suggestions = suggest_type(text, text)
     assert suggestions == [{"type": "keyword"}]
+
+
+def test_find_doubled_backticks_none():
+    text = 'select `ab`'
+    assert _find_doubled_backticks(text) == []
+
+
+def test_find_doubled_backticks_some():
+    text = 'select `a``b`'
+    assert _find_doubled_backticks(text) == [9, 10]
+
+
+def test_inside_quotes_01():
+    text = "select '"
+    assert is_inside_quotes(text, len(text)) == 'single'
+
+
+def test_inside_quotes_02():
+    text = "select '\\'"
+    assert is_inside_quotes(text, len(text)) == 'single'
+
+
+def test_inside_quotes_03():
+    text = "select '`"
+    assert is_inside_quotes(text, len(text)) == 'single'
+
+
+def test_inside_quotes_04():
+    text = 'select "'
+    assert is_inside_quotes(text, len(text)) == 'double'
+
+
+def test_inside_quotes_05():
+    text = 'select "\\"\''
+    assert is_inside_quotes(text, len(text)) == 'double'
+
+
+def test_inside_quotes_06():
+    text = 'select ""'
+    assert is_inside_quotes(text, len(text)) is False
+
+
+@pytest.mark.parametrize(
+    ["text", "position", "expected"],
+    [
+        ("select `'",      len("select `'"),  'backtick'),
+        ("select `' ",     len("select `' "), 'backtick'),
+        ("select `'",      -1,  'backtick'),
+        ("select `'",      -2,  False),
+        ('select `ab` ',   -1,  False),
+        ('select `ab` ',   -2,  'backtick'),
+        ('select `a``b` ', -1,  False),
+        ('select `a``b` ', -2,  'backtick'),
+        ('select `a``b` ', -3,  'backtick'),
+        ('select `a``b` ', -4,  'backtick'),
+        ('select `a``b` ', -5,  'backtick'),
+        ('select `a``b` ', -6,  'backtick'),
+        ('select `a``b` ', -7,  False),
+    ]
+)  # fmt: skip
+def test_inside_quotes_backtick_01(text, position, expected):
+    assert is_inside_quotes(text, position) == expected
+
+
+def test_inside_quotes_backtick_02():
+    """Empty backtick pairs are treated as a doubled (escaped) backtick.
+    This is okay because it is invalid SQL, and we don't have to complete on it.
+    """
+    text = 'select ``'
+    assert is_inside_quotes(text, -1) is False
+
+
+def test_inside_quotes_backtick_03():
+    """Empty backtick pairs are treated as a doubled (escaped) backtick.
+    This is okay because it is invalid SQL, and we don't have to complete on it.
+    """
+    text = 'select ``'
+    assert is_inside_quotes(text, -2) is False

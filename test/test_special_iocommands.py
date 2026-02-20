@@ -109,7 +109,18 @@ def test_favorite_query():
     with db_connection().cursor() as cur:
         query = 'select "✔"'
         mycli.packages.special.execute(cur, f"\\fs check {query}")
-        assert next(mycli.packages.special.execute(cur, "\\f check"))[0] == "> " + query
+        assert next(mycli.packages.special.execute(cur, "\\f check")).title == "> " + query
+
+
+@dbtest
+@pytest.mark.skipif(os.name == "nt", reason="Bug: fails on Windows, needs fixing, singleton of FQ not working right")
+def test_special_favorite_query():
+    with db_connection().cursor() as cur:
+        query = r'\?'
+        mycli.packages.special.execute(cur, rf"\fs special {query}")
+        assert (r'\G', r'\G', 'Display current query results vertically.') in next(
+            mycli.packages.special.execute(cur, r'\f special')
+        ).results
 
 
 def test_once_command():
@@ -201,8 +212,8 @@ def test_watch_query_iteration():
     expected_title = f"> {query}"
     with db_connection().cursor() as cur:
         result = next(mycli.packages.special.iocommands.watch_query(arg=query, cur=cur))
-    assert result[0] == expected_title
-    assert result[2][0] == expected_value
+    assert result.title == expected_title
+    assert result.headers[0] == expected_value
 
 
 @dbtest
@@ -229,8 +240,8 @@ def test_watch_query_full():
     ctrl_c_process.join(1)
     assert len(results) in expected_results
     for result in results:
-        assert result[0] == expected_title
-        assert result[2][0] == expected_value
+        assert result.title == expected_title
+        assert result.headers[0] == expected_value
 
 
 @dbtest
@@ -291,15 +302,15 @@ def test_split_sql_by_delimiter():
         mycli.packages.special.set_delimiter(delimiter_str)
         sql_input = f"select 1{delimiter_str} select \ufffc2"
         queries = ("select 1", "select \ufffc2")
-        for query, parsed_query in zip(queries, mycli.packages.special.split_queries(sql_input)):
+        for query, parsed_query in zip(queries, mycli.packages.special.split_queries(sql_input), strict=True):
             assert query == parsed_query
 
 
 def test_switch_delimiter_within_query():
     mycli.packages.special.set_delimiter(";")
     sql_input = "select 1; delimiter $$ select 2 $$ select 3 $$"
-    queries = ("select 1", "delimiter $$ select 2 $$ select 3 $$", "select 2", "select 3")
-    for query, parsed_query in zip(queries, mycli.packages.special.split_queries(sql_input)):
+    queries = ("select 1", "delimiter $$ select 2 $$ select 3 $$")
+    for query, parsed_query in zip(queries, mycli.packages.special.split_queries(sql_input), strict=True):
         assert query == parsed_query
 
 

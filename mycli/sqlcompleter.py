@@ -1,158 +1,63 @@
 from __future__ import annotations
 
 from collections import Counter
+from enum import IntEnum
 import logging
 import re
 from typing import Any, Collection, Generator, Iterable, Literal
 
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.completion.base import Document
+from pygments.lexers._mysql_builtins import MYSQL_DATATYPES, MYSQL_FUNCTIONS, MYSQL_KEYWORDS
+import rapidfuzz
 
-from mycli.packages.completion_engine import suggest_type
+from mycli.packages.completion_engine import is_inside_quotes, suggest_type
 from mycli.packages.filepaths import complete_path, parse_path, suggest_path
-from mycli.packages.parseutils import last_word
+from mycli.packages.parseutils import extract_columns_from_select, last_word
 from mycli.packages.special import llm
 from mycli.packages.special.favoritequeries import FavoriteQueries
+from mycli.packages.special.main import COMMANDS as SPECIAL_COMMANDS
 
 _logger = logging.getLogger(__name__)
 
 
+class Fuzziness(IntEnum):
+    PERFECT = 0
+    REGEX = 1
+    UNDER_WORDS = 2
+    CAMEL_CASE = 3
+    RAPIDFUZZ = 4
+
+
 class SQLCompleter(Completer):
-    keywords = [
-        "SELECT",
-        "FROM",
-        "WHERE",
-        "UPDATE",
-        "DELETE FROM",
-        "GROUP BY",
-        "JOIN",
-        "INSERT INTO",
-        "LIKE",
-        "LIMIT",
-        "ACCESS",
-        "ADD",
-        "ALL",
-        "ALTER TABLE",
-        "AND",
-        "ANY",
-        "AS",
-        "ASC",
-        "AUTO_INCREMENT",
-        "BEFORE",
-        "BEGIN",
-        "BETWEEN",
-        "BIGINT",
-        "BINARY",
-        "BY",
-        "CASE",
-        "CHANGE MASTER TO",
-        "CHAR",
-        "CHARACTER SET",
-        "CHECK",
-        "COLLATE",
-        "COLUMN",
-        "COMMENT",
-        "COMMIT",
-        "CONSTRAINT",
-        "CREATE",
-        "CURRENT",
-        "CURRENT_TIMESTAMP",
-        "DATABASE",
-        "DATE",
-        "DECIMAL",
-        "DEFAULT",
-        "DESC",
-        "DESCRIBE",
-        "DROP",
-        "ELSE",
-        "END",
-        "ENGINE",
-        "ESCAPE",
-        "EXISTS",
-        "FILE",
-        "FLOAT",
-        "FOR",
-        "FOREIGN KEY",
-        "FORMAT",
-        "FULL",
-        "FUNCTION",
-        "GRANT",
-        "HAVING",
-        "HOST",
-        "IDENTIFIED",
-        "IN",
-        "INCREMENT",
-        "INDEX",
-        "INT",
-        "INTEGER",
-        "INTERVAL",
-        "INTO",
-        "IS",
-        "KEY",
-        "LEFT",
-        "LEVEL",
-        "LOCK",
-        "LOGS",
-        "LONG",
-        "MASTER",
-        "MEDIUMINT",
-        "MODE",
-        "MODIFY",
-        "NOT",
-        "NULL",
-        "NUMBER",
-        "OFFSET",
-        "ON",
-        "OPTION",
-        "OR",
-        "ORDER BY",
-        "OUTER",
-        "OWNER",
-        "PASSWORD",
-        "PORT",
-        "PRIMARY",
-        "PRIVILEGES",
-        "PROCESSLIST",
-        "PURGE",
-        "REFERENCES",
-        "REGEXP",
-        "RENAME",
-        "REPAIR",
-        "RESET",
-        "REVOKE",
-        "RIGHT",
-        "ROLLBACK",
-        "ROW",
-        "ROWS",
-        "ROW_FORMAT",
-        "SAVEPOINT",
-        "SESSION",
-        "SET",
-        "SHARE",
-        "SHOW",
-        "SLAVE",
-        "SMALLINT",
-        "START",
-        "STOP",
-        "TABLE",
-        "THEN",
-        "TINYINT",
-        "TO",
-        "TRANSACTION",
-        "TRIGGER",
-        "TRUNCATE",
-        "UNION",
-        "UNIQUE",
-        "UNSIGNED",
-        "USE",
-        "USER",
-        "USING",
-        "VALUES",
-        "VARCHAR",
-        "VIEW",
-        "WHEN",
-        "WITH",
+    favorite_keywords = [
+        'SELECT',
+        'FROM',
+        'WHERE',
+        'UPDATE',
+        'DELETE FROM',
+        'GROUP BY',
+        'ORDER BY',
+        'JOIN',
+        'LEFT JOIN',
+        'INSERT INTO',
+        'LIKE',
+        'LIMIT',
+        'WITH',
+        'EXPLAIN',
     ]
+    keywords_raw = [
+        x.upper()
+        for x in favorite_keywords
+        + list(MYSQL_DATATYPES)
+        + list(MYSQL_KEYWORDS)
+        + ['ALTER TABLE', 'CHANGE MASTER TO', 'CHARACTER SET', 'FOREIGN KEY']
+    ]
+    keywords_d = dict.fromkeys(keywords_raw)
+    for x in SPECIAL_COMMANDS:
+        if x.upper() in keywords_d:
+            del keywords_d[x.upper()]
+    keywords = list(keywords_d)
 
     tidb_keywords = [
         "SELECT",
@@ -838,27 +743,7 @@ class SQLCompleter(Completer):
         "ZEROFILL",
     ]
 
-    functions = [
-        "AVG",
-        "CONCAT",
-        "COUNT",
-        "DISTINCT",
-        "FIRST",
-        "FORMAT",
-        "FROM_UNIXTIME",
-        "LAST",
-        "LCASE",
-        "LEN",
-        "MAX",
-        "MID",
-        "MIN",
-        "NOW",
-        "ROUND",
-        "SUM",
-        "TOP",
-        "UCASE",
-        "UNIX_TIMESTAMP",
-    ]
+    functions = [x.upper() for x in MYSQL_FUNCTIONS]
 
     # https://docs.pingcap.com/tidb/dev/tidb-functions
     tidb_functions = [
@@ -910,7 +795,7 @@ class SQLCompleter(Completer):
         self.reserved_words = set()
         for x in self.keywords:
             self.reserved_words.update(x.split())
-        self.name_pattern = re.compile(r"^[_a-z][_a-z0-9\$]*$")
+        self.name_pattern = re.compile(r"^[_a-zA-Z][_a-zA-Z0-9\$]*$")
 
         self.special_commands: list[str] = []
         self.table_formats = supported_formats
@@ -925,13 +810,6 @@ class SQLCompleter(Completer):
 
         return name
 
-    def unescape_name(self, name: str) -> str:
-        """Unquote a string."""
-        if name and name[0] == '"' and name[-1] == '"':
-            name = name[1:-1]
-
-        return name
-
     def escaped_names(self, names: Collection[str]) -> list[str]:
         return [self.escape_name(name) for name in names]
 
@@ -941,7 +819,7 @@ class SQLCompleter(Completer):
         self.special_commands.extend(special_commands)
 
     def extend_database_names(self, databases: list[str]) -> None:
-        self.databases.extend(databases)
+        self.databases.extend([self.escape_name(db) for db in databases])
 
     def extend_keywords(self, keywords: list[str], replace: bool = False) -> None:
         if replace:
@@ -1016,6 +894,17 @@ class SQLCompleter(Completer):
             metadata[self.dbname][relname].append(column)
             self.all_completions.add(column)
 
+    def extend_enum_values(self, enum_data: Iterable[tuple[str, str, list[str]]]) -> None:
+        metadata = self.dbmetadata["enum_values"]
+        if self.dbname not in metadata:
+            metadata[self.dbname] = {}
+
+        for relname, column, values in enum_data:
+            relname_escaped = self.escape_name(relname)
+            column_escaped = self.escape_name(column)
+            table_meta = metadata[self.dbname].setdefault(relname_escaped, {})
+            table_meta[column_escaped] = values
+
     def extend_functions(self, func_data: list[str] | Generator[tuple[str, str]], builtin: bool = False) -> None:
         # if 'builtin' is set this is extending the list of builtin functions
         if builtin:
@@ -1040,6 +929,20 @@ class SQLCompleter(Completer):
             metadata[self.dbname][func[0]] = None
             self.all_completions.add(func[0])
 
+    def extend_procedures(self, procedure_data: Generator[tuple]) -> None:
+        metadata = self.dbmetadata["procedures"]
+        if self.dbname not in metadata:
+            metadata[self.dbname] = {}
+
+        for elt in procedure_data:
+            # not sure why this happens on MariaDB in some cases
+            # see https://github.com/dbcli/mycli/issues/1531
+            if not elt:
+                continue
+            if not elt[0]:
+                continue
+            metadata[self.dbname][elt[0]] = None
+
     def set_dbname(self, dbname: str | None) -> None:
         self.dbname = dbname or ''
 
@@ -1048,17 +951,24 @@ class SQLCompleter(Completer):
         self.users: list[str] = []
         self.show_items: list[Completion] = []
         self.dbname = ""
-        self.dbmetadata: dict[str, Any] = {"tables": {}, "views": {}, "functions": {}}
+        self.dbmetadata: dict[str, Any] = {
+            "tables": {},
+            "views": {},
+            "functions": {},
+            "procedures": {},
+            "enum_values": {},
+        }
         self.all_completions = set(self.keywords + self.functions)
 
     @staticmethod
     def find_matches(
-        text: str,
+        orig_text: str,
         collection: Collection,
         start_only: bool = False,
         fuzzy: bool = True,
         casing: str | None = None,
-    ) -> Generator[Completion, None, None]:
+        text_before_cursor: str = '',
+    ) -> Generator[tuple[str, int], None, None]:
         """Find completion matches for the given text.
 
         Given the user's input text and a collection of available
@@ -1072,34 +982,96 @@ class SQLCompleter(Completer):
         yields prompt_toolkit Completion instances for any matches found
         in the collection of available completions.
         """
-        last = last_word(text, include="most_punctuations")
+        last = last_word(orig_text, include="most_punctuations")
         text = last.lower()
+        # unicode support not possible without adding the regex dependency
+        case_change_pat = re.compile("(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
-        completions = []
+        completions: list[tuple[str, int]] = []
+
+        def maybe_quote_identifier(item: str) -> str:
+            if item.startswith('`'):
+                return item
+            if item == '*':
+                return item
+            return '`' + item + '`'
+
+        # checking text.startswith() first is an optimization; is_inside_quotes() covers more cases
+        if text.startswith('`') or is_inside_quotes(text_before_cursor, len(text_before_cursor)) == 'backtick':
+            quoted_collection: Collection[Any] = [maybe_quote_identifier(x) if isinstance(x, str) else x for x in collection]
+        else:
+            quoted_collection = collection
 
         if fuzzy:
-            regex = ".*?".join(map(re.escape, text))
+            regex = ".{0,3}?".join(map(re.escape, text))
             pat = re.compile(f'({regex})')
-            for item in collection:
+            under_words_text = [x for x in text.split('_') if x]
+            case_words_text = re.split(case_change_pat, last)
+
+            for item in quoted_collection:
                 r = pat.search(item.lower())
                 if r:
-                    completions.append((len(r.group()), r.start(), item))
+                    completions.append((item, Fuzziness.REGEX))
+                    continue
+
+                under_words_item = [x for x in item.lower().split('_') if x]
+                occurrences = 0
+                for elt_word in under_words_text:
+                    for elt_item in under_words_item:
+                        if elt_item.startswith(elt_word):
+                            occurrences += 1
+                            break
+                if occurrences >= len(under_words_text):
+                    completions.append((item, Fuzziness.UNDER_WORDS))
+                    continue
+
+                case_words_item = re.split(case_change_pat, item)
+                occurrences = 0
+                for elt_word in case_words_text:
+                    for elt_item in case_words_item:
+                        if elt_item.startswith(elt_word):
+                            occurrences += 1
+                            break
+                if occurrences >= len(case_words_text):
+                    completions.append((item, Fuzziness.CAMEL_CASE))
+                    continue
+
+            if len(text) >= 4:
+                rapidfuzz_matches = rapidfuzz.process.extract(
+                    text,
+                    quoted_collection,
+                    scorer=rapidfuzz.fuzz.WRatio,
+                    # todo: maybe make our own processor which only does case-folding
+                    # because underscores are valuable info
+                    processor=rapidfuzz.utils.default_process,
+                    limit=20,
+                    score_cutoff=75,
+                )
+                for elt in rapidfuzz_matches:
+                    item, _score, _type = elt
+                    if len(item) < len(text) / 1.5:
+                        continue
+                    if item in completions:
+                        continue
+                    completions.append((item, Fuzziness.RAPIDFUZZ))
+
         else:
             match_end_limit = len(text) if start_only else None
-            for item in collection:
+            for item in quoted_collection:
                 match_point = item.lower().find(text, 0, match_end_limit)
                 if match_point >= 0:
-                    completions.append((len(text), match_point, item))
+                    completions.append((item, Fuzziness.PERFECT))
 
         if casing == "auto":
-            casing = "lower" if last and last[-1].islower() else "upper"
+            casing = "lower" if last and (last[0].islower() or last[-1].islower()) else "upper"
 
-        def apply_case(kw: str) -> str:
+        def apply_case(tup: tuple[str, int]) -> tuple[str, int]:
+            kw, fuzziness = tup
             if casing == "upper":
-                return kw.upper()
-            return kw.lower()
+                return (kw.upper(), fuzziness)
+            return (kw.lower(), fuzziness)
 
-        return (Completion(z if casing is None else apply_case(z), -len(text)) for x, y, z in completions)
+        return (x if casing is None else apply_case(x) for x in completions)
 
     def get_completions(
         self,
@@ -1108,19 +1080,34 @@ class SQLCompleter(Completer):
         smart_completion: bool | None = None,
     ) -> Iterable[Completion]:
         word_before_cursor = document.get_word_before_cursor(WORD=True)
+        last_for_len = last_word(word_before_cursor, include="most_punctuations")
+        text_for_len = last_for_len.lower()
+        last_for_len_paths = last_word(word_before_cursor, include='alphanum_underscore')
+
         if smart_completion is None:
             smart_completion = self.smart_completion
 
         # If smart_completion is off then match any word that starts with
         # 'word_before_cursor'.
         if not smart_completion:
-            return self.find_matches(word_before_cursor, self.all_completions, start_only=True, fuzzy=False)
+            matches = self.find_matches(
+                word_before_cursor,
+                self.all_completions,
+                start_only=True,
+                fuzzy=False,
+                text_before_cursor=document.text_before_cursor,
+            )
+            return (Completion(x[0], -len(text_for_len)) for x in matches)
 
-        completions: list[Completion] = []
+        completions: list[tuple[str, int, int]] = []
         suggestions = suggest_type(document.text, document.text_before_cursor)
+        rigid_sort = False
+        length_based_on_path = False
 
+        rank = 0
         for suggestion in suggestions:
             _logger.debug("Suggestion type: %r", suggestion["type"])
+            rank += 1
 
             if suggestion["type"] == "column":
                 tables = suggestion["tables"]
@@ -1131,15 +1118,27 @@ class SQLCompleter(Completer):
                     # which should suggest only columns that appear in more than
                     # one table
                     scoped_cols = [col for (col, count) in Counter(scoped_cols).items() if count > 1 and col != "*"]
+                elif not tables:
+                    # if tables was empty, this is a naked SELECT and we are
+                    # showing all columns. So make them unique and sort them.
+                    scoped_cols = sorted(set(scoped_cols), key=lambda s: s.strip('`'))
 
-                cols = self.find_matches(word_before_cursor, scoped_cols)
-                completions.extend(cols)
+                cols = self.find_matches(
+                    word_before_cursor,
+                    scoped_cols,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in cols])
 
             elif suggestion["type"] == "function":
                 # suggest user-defined functions using substring matching
                 funcs = self.populate_schema_objects(suggestion["schema"], "functions")
-                user_funcs = self.find_matches(word_before_cursor, funcs)
-                completions.extend(user_funcs)
+                user_funcs = self.find_matches(
+                    word_before_cursor,
+                    funcs,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in user_funcs])
 
                 # suggest hardcoded functions using startswith matching only if
                 # there is no schema qualifier. If a schema qualifier is
@@ -1147,63 +1146,143 @@ class SQLCompleter(Completer):
                 # eg: SELECT * FROM users u WHERE u.
                 if not suggestion["schema"]:
                     predefined_funcs = self.find_matches(
-                        word_before_cursor, self.functions, start_only=True, fuzzy=False, casing=self.keyword_casing
+                        word_before_cursor,
+                        self.functions,
+                        start_only=True,
+                        fuzzy=False,
+                        casing=self.keyword_casing,
+                        text_before_cursor=document.text_before_cursor,
                     )
-                    completions.extend(predefined_funcs)
+                    completions.extend([(*x, rank) for x in predefined_funcs])
+
+            elif suggestion["type"] == "procedure":
+                procs = self.populate_schema_objects(suggestion["schema"], "procedures")
+                procs_m = self.find_matches(
+                    word_before_cursor,
+                    procs,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in procs_m])
 
             elif suggestion["type"] == "table":
-                tables = self.populate_schema_objects(suggestion["schema"], "tables")
-                tables_m = self.find_matches(word_before_cursor, tables)
-                completions.extend(tables_m)
+                # If this is a select and columns are given, parse the columns and
+                # then only return tables that have one or more of the given columns.
+                # If no columns are given (or able to be parsed), return all tables
+                # as usual.
+                columns = extract_columns_from_select(document.text)
+                if columns:
+                    tables = self.populate_schema_objects(suggestion["schema"], "tables", columns)
+                else:
+                    tables = self.populate_schema_objects(suggestion["schema"], "tables")
+                tables_m = self.find_matches(
+                    word_before_cursor,
+                    tables,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in tables_m])
 
             elif suggestion["type"] == "view":
                 views = self.populate_schema_objects(suggestion["schema"], "views")
-                views_m = self.find_matches(word_before_cursor, views)
-                completions.extend(views_m)
+                views_m = self.find_matches(
+                    word_before_cursor,
+                    views,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in views_m])
 
             elif suggestion["type"] == "alias":
                 aliases = suggestion["aliases"]
-                aliases_m = self.find_matches(word_before_cursor, aliases)
-                completions.extend(aliases_m)
+                aliases_m = self.find_matches(
+                    word_before_cursor,
+                    aliases,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in aliases_m])
 
             elif suggestion["type"] == "database":
-                dbs_m = self.find_matches(word_before_cursor, self.databases)
-                completions.extend(dbs_m)
+                dbs_m = self.find_matches(
+                    word_before_cursor,
+                    self.databases,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in dbs_m])
 
             elif suggestion["type"] == "keyword":
-                keywords_m = self.find_matches(word_before_cursor, self.keywords, casing=self.keyword_casing)
-                completions.extend(keywords_m)
+                keywords_m = self.find_matches(
+                    word_before_cursor,
+                    self.keywords,
+                    casing=self.keyword_casing,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in keywords_m])
 
             elif suggestion["type"] == "show":
                 show_items_m = self.find_matches(
-                    word_before_cursor, self.show_items, start_only=False, fuzzy=True, casing=self.keyword_casing
+                    word_before_cursor,
+                    self.show_items,
+                    start_only=False,
+                    fuzzy=True,
+                    casing=self.keyword_casing,
+                    text_before_cursor=document.text_before_cursor,
                 )
-                completions.extend(show_items_m)
+                completions.extend([(*x, rank) for x in show_items_m])
 
             elif suggestion["type"] == "change":
-                change_items_m = self.find_matches(word_before_cursor, self.change_items, start_only=False, fuzzy=True)
-                completions.extend(change_items_m)
+                change_items_m = self.find_matches(
+                    word_before_cursor,
+                    self.change_items,
+                    start_only=False,
+                    fuzzy=True,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in change_items_m])
 
             elif suggestion["type"] == "user":
-                users_m = self.find_matches(word_before_cursor, self.users, start_only=False, fuzzy=True)
-                completions.extend(users_m)
+                users_m = self.find_matches(
+                    word_before_cursor,
+                    self.users,
+                    start_only=False,
+                    fuzzy=True,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in users_m])
 
             elif suggestion["type"] == "special":
-                special_m = self.find_matches(word_before_cursor, self.special_commands, start_only=True, fuzzy=False)
-                completions.extend(special_m)
+                special_m = self.find_matches(
+                    word_before_cursor,
+                    self.special_commands,
+                    start_only=True,
+                    fuzzy=False,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                # specials are special, and go early in the candidates, first if possible
+                completions.extend([(*x, 0) for x in special_m])
 
             elif suggestion["type"] == "favoritequery":
                 if hasattr(FavoriteQueries, 'instance') and hasattr(FavoriteQueries.instance, 'list'):
-                    queries_m = self.find_matches(word_before_cursor, FavoriteQueries.instance.list(), start_only=False, fuzzy=True)
-                    completions.extend(queries_m)
+                    queries_m = self.find_matches(
+                        word_before_cursor,
+                        FavoriteQueries.instance.list(),
+                        start_only=False,
+                        fuzzy=True,
+                        text_before_cursor=document.text_before_cursor,
+                    )
+                    completions.extend([(*x, rank) for x in queries_m])
 
             elif suggestion["type"] == "table_format":
-                formats_m = self.find_matches(word_before_cursor, self.table_formats)
-                completions.extend(formats_m)
+                formats_m = self.find_matches(
+                    word_before_cursor,
+                    self.table_formats,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in formats_m])
 
             elif suggestion["type"] == "file_name":
                 file_names_m = self.find_files(word_before_cursor)
-                completions.extend(file_names_m)
+                completions.extend([(*x, rank) for x in file_names_m])
+                # for filenames we _really_ want directories to go last
+                rigid_sort = True
+                length_based_on_path = True
             elif suggestion["type"] == "llm":
                 if not word_before_cursor:
                     tokens = document.text.split()[1:]
@@ -1215,24 +1294,65 @@ class SQLCompleter(Completer):
                     possible_entries,
                     start_only=False,
                     fuzzy=True,
+                    text_before_cursor=document.text_before_cursor,
                 )
-                completions.extend(subcommands_m)
+                completions.extend([(*x, rank) for x in subcommands_m])
+            elif suggestion["type"] == "enum_value":
+                enum_values = self.populate_enum_values(
+                    suggestion["tables"],
+                    suggestion["column"],
+                    suggestion.get("parent"),
+                )
+                if enum_values:
+                    quoted_values = [self._quote_sql_string(value) for value in enum_values]
+                    completions = [
+                        (*x, rank)
+                        for x in self.find_matches(
+                            word_before_cursor,
+                            quoted_values,
+                            text_before_cursor=document.text_before_cursor,
+                        )
+                    ]
+                    break
 
-        return completions
+        def completion_sort_key(item: tuple[str, int, int], text_for_len: str):
+            candidate, fuzziness, rank = item
+            if not text_for_len:
+                # sort only by the rank (the order of the completion type)
+                return (0, rank, 0)
+            elif candidate.lower().startswith(text_for_len):
+                # sort only by the length of the candidate
+                return (0, 0, -1000 + len(candidate))
+            # sort by fuzziness and rank
+            # todo add alpha here, or original order?
+            return (fuzziness, rank, 0)
 
-    def find_files(self, word: str) -> Generator[Completion, None, None]:
+        if rigid_sort:
+            uniq_completions_str = dict.fromkeys(x[0] for x in completions)
+        else:
+            sorted_completions = sorted(completions, key=lambda item: completion_sort_key(item, text_for_len.lower()))
+            uniq_completions_str = dict.fromkeys(x[0] for x in sorted_completions)
+
+        if length_based_on_path:
+            return (Completion(x, -len(last_for_len_paths)) for x in uniq_completions_str)
+        else:
+            return (Completion(x, -len(text_for_len)) for x in uniq_completions_str)
+
+    def find_files(self, word: str) -> Generator[tuple[str, int], None, None]:
         """Yield matching directory or file names.
 
         :param word:
         :return: iterable
 
         """
+        # todo position is ignored, but may need to be used
+        # todo fuzzy matches for filenames
         base_path, last_path, position = parse_path(word)
         paths = suggest_path(word)
-        for name in sorted(paths):
+        for name in paths:
             suggestion = complete_path(name, last_path)
             if suggestion:
-                yield Completion(suggestion, position)
+                yield (suggestion, Fuzziness.PERFECT)
 
     def populate_scoped_cols(self, scoped_tbls: list[tuple[str | None, str, str | None]]) -> list[str]:
         """Find all columns in a set of scoped_tables
@@ -1242,6 +1362,14 @@ class SQLCompleter(Completer):
         columns = []
         meta = self.dbmetadata
 
+        # if scoped tables is empty, this is just after a SELECT so we
+        # show all columns for all tables in the schema.
+        if len(scoped_tbls) == 0 and self.dbname:
+            for table in meta["tables"][self.dbname]:
+                columns.extend(meta["tables"][self.dbname][table])
+            return columns or ['*']
+
+        # query includes tables, so use those to populate columns
         for tbl in scoped_tbls:
             # A fully qualified schema.relname reference or default_schema
             # DO NOT escape schema names.
@@ -1272,15 +1400,83 @@ class SQLCompleter(Completer):
 
         return columns
 
-    def populate_schema_objects(self, schema: str | None, obj_type: str) -> list[str]:
+    def populate_enum_values(
+        self,
+        scoped_tbls: list[tuple[str | None, str, str | None]],
+        column: str,
+        parent: str | None = None,
+    ) -> list[str]:
+        values: list[str] = []
+        meta = self.dbmetadata["enum_values"]
+        column_key = self._escape_identifier(column)
+        parent_key = self._strip_backticks(parent) if parent else None
+
+        for schema, relname, alias in scoped_tbls:
+            if parent_key and not self._matches_parent(parent_key, schema, relname, alias):
+                continue
+
+            schema = schema or self.dbname
+            table_meta = meta.get(schema, {})
+            escaped_relname = self.escape_name(relname)
+
+            for rel_key in {relname, escaped_relname}:
+                columns = table_meta.get(rel_key)
+                if columns and column_key in columns:
+                    values.extend(columns[column_key])
+
+        return list(dict.fromkeys(values))
+
+    def _escape_identifier(self, name: str) -> str:
+        return self.escape_name(self._strip_backticks(name))
+
+    @staticmethod
+    def _strip_backticks(name: str | None) -> str:
+        if name and name[0] == "`" and name[-1] == "`":
+            return name[1:-1]
+        return name or ""
+
+    @staticmethod
+    def _matches_parent(parent: str, schema: str | None, relname: str, alias: str | None) -> bool:
+        if alias and parent == alias:
+            return True
+        if parent == relname:
+            return True
+        if schema and parent == f"{schema}.{relname}":
+            return True
+        return False
+
+    @staticmethod
+    def _quote_sql_string(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def populate_schema_objects(self, schema: str | None, obj_type: str, columns: list[str] | None = None) -> list[str]:
         """Returns list of tables or functions for a (optional) schema"""
         metadata = self.dbmetadata[obj_type]
         schema = schema or self.dbname
-
         try:
-            objects = metadata[schema].keys()
+            objects = list(metadata[schema].keys())
         except KeyError:
             # schema doesn't exist
             objects = []
 
-        return objects
+        filtered_objects: list[str] = []
+        remaining_objects: list[str] = []
+
+        # If the requested object type is tables and the user already entered
+        # columns, return a filtered list of tables (or views) that contain
+        # one or more of the given columns. If a table does not contain the
+        # given columns, add it to a separate list to add to the end of the
+        # filtered suggestions.
+        if obj_type == "tables" and columns and objects:
+            for obj in objects:
+                matched = False
+                for column in metadata[schema][obj]:
+                    if column in columns:
+                        filtered_objects.append(obj)
+                        matched = True
+                        break
+                if not matched:
+                    remaining_objects.append(obj)
+        else:
+            filtered_objects = objects
+        return filtered_objects + remaining_objects

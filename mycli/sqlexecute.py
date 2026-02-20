@@ -10,13 +10,13 @@ from typing import Any, Generator, Iterable
 import pymysql
 from pymysql.connections import Connection
 from pymysql.constants import FIELD_TYPE
-from pymysql.converters import conversions, convert_date, convert_datetime, convert_timedelta, decoders
+from pymysql.converters import conversions, convert_date, convert_datetime, convert_time, decoders
 from pymysql.cursors import Cursor
 
-from mycli import connection_keepalive
 from mycli.packages.special import iocommands
 from mycli.packages.special.main import CommandNotFound, execute
 from mycli.packages.parseutils import query_starts_with, query_has_where_clause
+from mycli.packages.sqlresult import SQLResult
 
 try:
     import paramiko  # noqa: F401
@@ -111,13 +111,56 @@ class SQLExecute:
     users_query = """SELECT CONCAT("'", user, "'@'",host,"'") FROM mysql.user"""
 
     functions_query = '''SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
-    WHERE ROUTINE_TYPE="FUNCTION" AND ROUTINE_SCHEMA = "%s"'''
+    WHERE ROUTINE_TYPE="FUNCTION" AND ROUTINE_SCHEMA = %s'''
+
+    procedures_query = '''SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
+    WHERE ROUTINE_TYPE="PROCEDURE" AND ROUTINE_SCHEMA = %s'''
 
     table_columns_query = """select TABLE_NAME, COLUMN_NAME from information_schema.columns
-                                    where table_schema = '%s'
+                                    where table_schema = %s
+                                    order by table_name,ordinal_position"""
+
+    enum_values_query = """select TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns
+                                    where table_schema = %s and data_type = 'enum'
                                     order by table_name,ordinal_position"""
 
     now_query = """SELECT NOW()"""
+
+    @staticmethod
+    def _parse_enum_values(column_type: str) -> list[str]:
+        if not column_type or not column_type.lower().startswith("enum("):
+            return []
+
+        values: list[str] = []
+        current: list[str] = []
+        in_quote = False
+        i = column_type.find("(") + 1
+
+        while i < len(column_type):
+            ch = column_type[i]
+
+            if not in_quote:
+                if ch == "'":
+                    in_quote = True
+                    current = []
+                elif ch == ")":
+                    break
+            else:
+                if ch == "\\" and i + 1 < len(column_type):
+                    current.append(column_type[i + 1])
+                    i += 1
+                elif ch == "'":
+                    if i + 1 < len(column_type) and column_type[i + 1] == "'":
+                        current.append("'")
+                        i += 1
+                    else:
+                        values.append("".join(current))
+                        in_quote = False
+                else:
+                    current.append(ch)
+            i += 1
+
+        return values
 
     def __init__(
         self,
@@ -136,6 +179,7 @@ class SQLExecute:
         ssh_password: str | None,
         ssh_key_filename: str | None,
         init_command: str | None = None,
+        unbuffered: bool | None = None,
     ) -> None:
         self.dbname = database
         self.user = user
@@ -154,6 +198,7 @@ class SQLExecute:
         self.ssh_password = ssh_password
         self.ssh_key_filename = ssh_key_filename
         self.init_command = init_command
+        self.unbuffered = unbuffered
         self.conn: Connection | None = None
         self.connect()
 
@@ -174,6 +219,7 @@ class SQLExecute:
         ssh_password: str | None = None,
         ssh_key_filename: str | None = None,
         init_command: str | None = None,
+        unbuffered: bool | None = None,
     ):
         db = database if database is not None else self.dbname
         user = user if user is not None else self.user
@@ -190,6 +236,7 @@ class SQLExecute:
         ssh_password = ssh_password if ssh_password is not None else self.ssh_password
         ssh_key_filename = ssh_key_filename if ssh_key_filename is not None else self.ssh_key_filename
         init_command = init_command if init_command is not None else self.init_command
+        unbuffered = unbuffered if unbuffered is not None else self.unbuffered
         _logger.debug(
             "Connection DB Params: \n"
             "\tdatabase: %r"
@@ -205,7 +252,8 @@ class SQLExecute:
             "\tssh_port: %r"
             "\tssh_password: %r"
             "\tssh_key_filename: %r"
-            "\tinit_command: %r",
+            "\tinit_command: %r"
+            "\tunbuffered: %r",
             db,
             user,
             host,
@@ -220,13 +268,14 @@ class SQLExecute:
             ssh_password,
             ssh_key_filename,
             init_command,
+            unbuffered,
         )
         conv = conversions.copy()
         conv.update({
-            FIELD_TYPE.TIMESTAMP: lambda obj: (convert_datetime(obj) or obj),
-            FIELD_TYPE.DATETIME: lambda obj: (convert_datetime(obj) or obj),
-            FIELD_TYPE.TIME: lambda obj: (convert_timedelta(obj) or obj),
-            FIELD_TYPE.DATE: lambda obj: (convert_date(obj) or obj),
+            FIELD_TYPE.TIMESTAMP: lambda obj: convert_datetime(obj) or obj,
+            FIELD_TYPE.DATETIME: lambda obj: convert_datetime(obj) or obj,
+            FIELD_TYPE.TIME: lambda obj: convert_time(obj) or obj,
+            FIELD_TYPE.DATE: lambda obj: convert_date(obj) or obj,
         })
 
         defer_connect = False
@@ -259,6 +308,7 @@ class SQLExecute:
             program_name="mycli",
             defer_connect=defer_connect,
             init_command=init_command or None,
+            cursorclass=pymysql.cursors.SSCursor if unbuffered else pymysql.cursors.Cursor,
         )  # type: ignore[misc]
 
         if ssh_host:
@@ -281,9 +331,6 @@ class SQLExecute:
             except Exception as e:
                 raise e
 
-        # Start keepalive thread
-        connection_keepalive.keepalive(conn)
-
         if self.conn is not None:
             try:
                 self.conn.close()
@@ -301,11 +348,12 @@ class SQLExecute:
         self.charset = charset
         self.ssl = ssl
         self.init_command = init_command
+        self.unbuffered = unbuffered
         # retrieve connection id
         self.reset_connection_id()
         self.server_info = ServerInfo.from_version_string(conn.server_version)  # type: ignore[attr-defined]
 
-    def run(self, statement: str) -> Generator[tuple, None, None]:
+    def run(self, statement: str) -> Generator[SQLResult, None, None]:
         """Execute the sql in the database and return the results. The results
         are a list of tuples. Each tuple has 4 values
         (title, rows, headers, status).
@@ -314,7 +362,7 @@ class SQLExecute:
         # Remove spaces and EOL
         statement = statement.strip()
         if not statement:  # Empty string
-            yield (None, None, None, None)
+            yield SQLResult()
 
         # Split the sql into separate queries and run each one.
         # Unless it's saving a favorite query, in which case we
@@ -340,8 +388,7 @@ class SQLExecute:
             cur = self.conn.cursor()
             try:  # Special command
                 _logger.debug("Trying a dbspecial command. sql: %r", sql)
-                for result in execute(cur, sql):
-                    yield result
+                yield from execute(cur, sql)
             except CommandNotFound:  # Regular SQL
                 _logger.debug("Regular sql statement. sql: %r", sql)
                 validate_update_has_where(sql)
@@ -355,22 +402,25 @@ class SQLExecute:
                     if not cur.nextset() or (not cur.rowcount and cur.description is None):
                         break
 
-    def get_result(self, cursor: Cursor) -> tuple:
+    def get_result(self, cursor: Cursor) -> SQLResult:
         """Get the current result's data from the cursor."""
         title = headers = None
 
         # cursor.description is not None for queries that return result sets,
         # e.g. SELECT or SHOW.
+        plural = '' if cursor.rowcount == 1 else 's'
         if cursor.description:
             headers = [x[0] for x in cursor.description]
-            plural = '' if cursor.rowcount == 1 else 's'
             status = f'{cursor.rowcount} row{plural} in set'
         else:
             _logger.debug("No rows in result.")
-            plural = '' if cursor.rowcount == 1 else 's'
             status = f'Query OK, {cursor.rowcount} row{plural} affected'
 
-        return (title, cursor if cursor.description else None, headers, status)
+        if cursor.warning_count > 0:
+            plural = '' if cursor.warning_count == 1 else 's'
+            status = f'{status}, {cursor.warning_count} warning{plural}'
+
+        return SQLResult(title=title, results=cursor, headers=headers, status=status)
 
     def tables(self) -> Generator[tuple[str], None, None]:
         """Yields table names"""
@@ -379,17 +429,26 @@ class SQLExecute:
         with self.conn.cursor() as cur:
             _logger.debug("Tables Query. sql: %r", self.tables_query)
             cur.execute(self.tables_query)
-            for row in cur:
-                yield row
+            yield from cur
 
     def table_columns(self) -> Generator[tuple[str, str], None, None]:
         """Yields (table name, column name) pairs"""
         assert isinstance(self.conn, Connection)
         with self.conn.cursor() as cur:
             _logger.debug("Columns Query. sql: %r", self.table_columns_query)
-            cur.execute(self.table_columns_query % self.dbname)
-            for row in cur:
-                yield row
+            cur.execute(self.table_columns_query, (self.dbname,))
+            yield from cur
+
+    def enum_values(self) -> Generator[tuple[str, str, list[str]], None, None]:
+        """Yields (table name, column name, enum values) tuples"""
+        assert isinstance(self.conn, Connection)
+        with self.conn.cursor() as cur:
+            _logger.debug("Enum Values Query. sql: %r", self.enum_values_query)
+            cur.execute(self.enum_values_query, (self.dbname,))
+            for table_name, column_name, column_type in cur:
+                values = self._parse_enum_values(column_type)
+                if values:
+                    yield (table_name, column_name, values)
 
     def databases(self) -> list[str]:
         assert isinstance(self.conn, Connection)
@@ -404,9 +463,22 @@ class SQLExecute:
         assert isinstance(self.conn, Connection)
         with self.conn.cursor() as cur:
             _logger.debug("Functions Query. sql: %r", self.functions_query)
-            cur.execute(self.functions_query % self.dbname)
-            for row in cur:
-                yield row
+            cur.execute(self.functions_query, (self.dbname,))
+            yield from cur
+
+    def procedures(self) -> Generator[tuple, None, None]:
+        """Yields tuples of (procedure_name, )"""
+
+        assert isinstance(self.conn, Connection)
+        with self.conn.cursor() as cur:
+            _logger.debug("Procedures Query. sql: %r", self.procedures_query)
+            try:
+                cur.execute(self.procedures_query, (self.dbname,))
+            except pymysql.DatabaseError as e:
+                _logger.error('No procedure completions due to %r', e)
+                yield ()
+            else:
+                yield from cur
 
     def show_candidates(self) -> Generator[tuple, None, None]:
         assert isinstance(self.conn, Connection)
@@ -431,8 +503,7 @@ class SQLExecute:
                 _logger.error("No user completions due to %r", e)
                 yield ()
             else:
-                for row in cur:
-                    yield row
+                yield from cur
 
     def now(self) -> datetime.datetime:
         assert isinstance(self.conn, Connection)
@@ -453,9 +524,14 @@ class SQLExecute:
         # Remember current connection id
         _logger.debug("Get current connection id")
         try:
-            res = self.run("select connection_id()")
-            for _title, cur, _headers, _status in res:
-                self.connection_id = cur.fetchone()[0]
+            results = self.run("select connection_id()")
+            for result in results:
+                cur = result.results
+                if isinstance(cur, Cursor):
+                    v = cur.fetchone()
+                    self.connection_id = v[0] if v is not None else -1
+                else:
+                    raise ValueError
         except Exception as e:
             # See #1054
             self.connection_id = -1
@@ -480,8 +556,7 @@ class SQLExecute:
         if "cipher" in sslp:
             ctx.set_ciphers(sslp["cipher"])
 
-        # raise this default to v1.1 or v1.2?
-        ctx.minimum_version = ssl.TLSVersion.TLSv1
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
 
         if "tls_version" in sslp:
             tls_version = sslp["tls_version"]
@@ -502,3 +577,10 @@ class SQLExecute:
                 _logger.error("Invalid tls version: %s", tls_version)
 
         return ctx
+
+    def close(self) -> None:
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except pymysql.err.Error:
+                pass

@@ -1,9 +1,17 @@
 # vi: ft=dosini
 [main]
 
+# Enable or disable the automatic displaying of warnings ("SHOW WARNINGS")
+# after executing a SQL statement when applicable.
+show_warnings = False
+
 # Enables context sensitive auto-completion. If this is disabled the all
 # possible completions will be listed.
 smart_completion = True
+
+# Minimum characters typed before offering completion suggestions.
+# Suggestion: 3.
+min_completion_trigger = 1
 
 # Multi-line mode allows breaking up the sql statements into multiple lines. If
 # this is set to True, then the end of the statements must have a semi-colon.
@@ -15,6 +23,14 @@ multi_line = False
 # that may cause harm to the database such as "drop table", "drop database"
 # or "shutdown".
 destructive_warning = True
+
+# Queries starting with these keywords will activate the destructive warning.
+# UPDATE will not activate the warning if the statement includes a WHERE
+# clause.
+destructive_keywords = DROP SHUTDOWN DELETE TRUNCATE ALTER UPDATE
+
+# interactive query history location.
+history_file = ~/.mycli-history
 
 # log_file location.
 log_file = ~/.mycli.test.log
@@ -30,6 +46,9 @@ log_level = DEBUG
 # Timing of sql statements and table rendering.
 timing = True
 
+# Show the full SQL when running a favorite query. Set to False to hide.
+show_favorite_query = True
+
 # Beep after long-running queries are completed; 0 to disable.
 beep_after_seconds = 0
 
@@ -43,6 +62,19 @@ table_format = ascii
 # Redirected otuput format
 # Recommended: csv.
 redirect_format = csv
+
+# How to display the missing value (ie NULL).  Only certain table formats
+# support configuring the missing value.  CSV for example always uses the
+# empty string, and JSON formats use native nulls.
+null_string = <nope>
+
+# How to align numeric data in tabular output: right or left.
+numeric_alignment = right
+
+# How to display binary values in tabular output: "hex", or "utf8".  "utf8"
+# means attempt to render valid UTF-8 sequences as strings, then fall back
+# to hex rendering if not possible.
+binary_display = hex
 
 # A command to run after a successful output redirect, with {} to be replaced
 # with the escaped filename.  Mac example: echo {} | pbcopy.  Escaping is not
@@ -66,20 +98,25 @@ key_bindings = emacs
 wider_completion_menu = False
 
 # MySQL prompt
-# \D - The full current date
-# \d - Database name
-# \h - Hostname of the server
-# \m - Minutes of the current time
-# \n - Newline
-# \P - AM/PM
-# \p - Port
-# \R - The current time, in 24-hour military time (0-23)
-# \r - The current time, standard 12-hour time (1-12)
-# \s - Seconds of the current time
-# \t - Product type (Percona, MySQL, MariaDB, TiDB)
-# \A - DSN alias name (from the [alias_dsn] section)
-# \u - Username
-# \x1b[...m - insert ANSI escape sequence
+# * \D - full current date, e.g. Sat Feb 14 15:55:48 2026
+# * \R - current hour in 24-hour time (00–23)
+# * \r - current hour in 12-hour time (01–12)
+# * \m - minutes of the current time
+# * \s - seconds of the current time
+# * \P - AM/PM
+# * \d - selected database/schema
+# * \h - hostname of the server
+# * \p - connection port
+# * \j - connection socket basename
+# * \J - full connection socket path
+# * \k - connection socket basename OR the port
+# * \K - full connection socket path OR the port
+# * \t - database vendor (Percona, MySQL, MariaDB, TiDB)
+# * \u - username
+# * \A - DSN alias
+# * \n - a newline
+# * \_ - a space
+# * \x1b[...m - an ANSI escape sequence (can style with color)
 prompt = "\t \u@\h:\d> "
 prompt_continuation = ->
 
@@ -102,7 +139,70 @@ enable_pager = True
 # Choose a specific pager
 pager = less
 
+# whether to show verbose warnings about the transition away from reading my.cnf
+my_cnf_transition_done = False
+
+# Whether to store and retrieve passwords from the system keyring.
+# See the documentation for https://pypi.org/project/keyring/ for your OS.
+# Note that the hostname is considered to be different if short or qualified.
+# This can be overridden with --use-keyring= at the CLI.
+# A password can be reset with --use-keyring=reset at the CLI.
+use_keyring = False
+
+[connection]
+
+# character set for connections without --charset being set
+default_character_set = utf8mb4
+
+# whether to enable LOAD DATA LOCAL INFILE for connections without --local-infile being set
+default_local_infile = False
+
+# How often to send periodic background pings to the server when input is idle.  Ticks are
+# roughly in seconds, but may be faster.  Set to zero to disable.  Suggestion: 300.
+default_keepalive_ticks = 0
+
+# Sets the desired behavior for handling secure connections to the database server.
+# Possible values:
+# auto = SSL is preferred. Will attempt to connect via SSL, but will fallback to cleartext as needed.
+# on = SSL is required. Will attempt to connect via SSL and will fail if a secure connection is not established.
+# off = do not use SSL. Will fail if the server requires a secure connection.
+default_ssl_mode = auto
+
+# SSL CA file for connections without --ssl-ca being set
+default_ssl_ca =
+
+# SSL CA directory for connections without --ssl-capath being set
+default_ssl_capath =
+
+# SSL X509 cert path for connections without --ssl-cert being set
+default_ssl_cert =
+
+# SSL X509 key for connections without --ssl-key being set
+default_ssl_key =
+
+# SSL cipher to use for connections without --ssl-cipher being set
+default_ssl_cipher =
+
+# whether to verify server's "Common Name" in its cert, for connections without
+# --ssl-verify-server-cert being set
+default_ssl_verify_server_cert = False
+
+[llm]
+
+# If set to a positive integer, truncate text/binary fields to that width
+# in bytes when sending sample data, to conserve tokens.  Suggestion: 1024.
+prompt_field_truncate = None
+
+# If set to a positive integer, attempt to truncate various sections of LLM
+# prompt input to that number in bytes, to conserve tokens.  Suggestion:
+# 1000000.
+prompt_section_truncate = None
+
 [keys]
+
+# possible values: exit, none
+control_d = exit
+
 # possible values: auto, fzf, reverse_isearch
 control_r = auto
 

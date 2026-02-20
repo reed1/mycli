@@ -2,6 +2,7 @@ import threading
 from typing import Callable
 
 from mycli.packages.special.main import COMMANDS
+from mycli.packages.sqlresult import SQLResult
 from mycli.sqlcompleter import SQLCompleter
 from mycli.sqlexecute import ServerSpecies, SQLExecute
 
@@ -18,7 +19,7 @@ class CompletionRefresher:
         executor: SQLExecute,
         callbacks: Callable | list[Callable],
         completer_options: dict | None = None,
-    ) -> list[tuple]:
+    ) -> list[SQLResult]:
         """Creates a SQLCompleter object and populates it with the relevant
         completion suggestions in a background thread.
 
@@ -35,14 +36,14 @@ class CompletionRefresher:
 
         if self.is_refreshing():
             self._restart_refresh.set()
-            return [(None, None, None, "Auto-completion refresh restarted.")]
+            return [SQLResult(status="Auto-completion refresh restarted.")]
         else:
             self._completer_thread = threading.Thread(
                 target=self._bg_refresh, args=(executor, callbacks, completer_options), name="completion_refresh"
             )
             self._completer_thread.daemon = True
             self._completer_thread.start()
-            return [(None, None, None, "Auto-completion refresh started in the background.")]
+            return [SQLResult(status="Auto-completion refresh started in the background.")]
 
     def is_refreshing(self) -> bool:
         return bool(self._completer_thread and self._completer_thread.is_alive())
@@ -96,6 +97,8 @@ class CompletionRefresher:
         for callback in callbacks:
             callback(completer)
 
+        executor.close()
+
 
 def refresher(name: str, refreshers: dict = CompletionRefresher.refreshers) -> Callable:
     """Decorator to add the decorated function to the dictionary of
@@ -129,6 +132,11 @@ def refresh_tables(completer: SQLCompleter, executor: SQLExecute) -> None:
     completer.extend_columns(table_columns_dbresult, kind="tables")
 
 
+@refresher("enum_values")
+def refresh_enum_values(completer: SQLCompleter, executor: SQLExecute) -> None:
+    completer.extend_enum_values(executor.enum_values())
+
+
 @refresher("users")
 def refresh_users(completer: SQLCompleter, executor: SQLExecute) -> None:
     completer.extend_users(executor.users())
@@ -145,6 +153,11 @@ def refresh_functions(completer: SQLCompleter, executor: SQLExecute) -> None:
     completer.extend_functions(executor.functions())
     if executor.server_info and executor.server_info.species == ServerSpecies.TiDB:
         completer.extend_functions(completer.tidb_functions, builtin=True)
+
+
+@refresher("procedures")
+def refresh_procedures(completer: SQLCompleter, executor: SQLExecute) -> None:
+    completer.extend_procedures(executor.procedures())
 
 
 @refresher("special_commands")

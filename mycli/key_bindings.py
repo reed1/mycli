@@ -1,7 +1,13 @@
 import logging
 
+from prompt_toolkit.application.current import get_app
 from prompt_toolkit.enums import EditingMode
-from prompt_toolkit.filters import completion_is_selected, control_is_searchable, emacs_mode
+from prompt_toolkit.filters import (
+    Condition,
+    completion_is_selected,
+    control_is_searchable,
+    emacs_mode,
+)
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 
@@ -10,6 +16,19 @@ from mycli.packages.toolkit.fzf import search_history
 from .reed_key_bindings import add_custom_key_bindings
 
 _logger = logging.getLogger(__name__)
+
+
+@Condition
+def ctrl_d_condition() -> bool:
+    """Ctrl-D exit binding is only active when the buffer is empty."""
+    app = get_app()
+    return not app.current_buffer.text
+
+
+@Condition
+def in_completion() -> bool:
+    app = get_app()
+    return bool(app.current_buffer.complete_state)
 
 
 def mycli_bindings(mycli) -> KeyBindings:
@@ -48,6 +67,16 @@ def mycli_bindings(mycli) -> KeyBindings:
             b.complete_next()
         else:
             b.start_completion(select_first=True)
+
+    @kb.add("escape", eager=True, filter=in_completion)
+    def _(event: KeyPressEvent) -> None:
+        """Cancel completion menu.
+
+        There will be a lag when canceling Escape due to the processing of
+        Alt- keystrokes as Escape- sequences.
+
+        There will be no lag when using control-g to cancel."""
+        event.app.current_buffer.cancel_completion()
 
     @kb.add("c-space")
     def _(event: KeyPressEvent) -> None:
@@ -156,6 +185,16 @@ def mycli_bindings(mycli) -> KeyBindings:
         """Search history using fzf when available."""
         _logger.debug("Detected <alt-r> key.")
         search_history(event)
+
+    @kb.add('c-d', filter=ctrl_d_condition)
+    def _(event: KeyPressEvent) -> None:
+        """Exit mycli or ignore keypress."""
+        _logger.debug('Detected <C-d> key on empty line.')
+        mode = mycli.config.get('keys', {}).get('control_d', 'exit')
+        if mode == 'exit':
+            event.app.exit(exception=EOFError, style='class:exiting')
+        else:
+            event.app.output.bell()
 
     @kb.add("enter", filter=completion_is_selected)
     def _(event: KeyPressEvent) -> None:

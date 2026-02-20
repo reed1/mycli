@@ -11,11 +11,12 @@ import pytest
 
 from mycli.main import special
 
+DATABASE = "mycli_test_db"
 PASSWORD = os.getenv("PYTEST_PASSWORD")
 USER = os.getenv("PYTEST_USER", "root")
 HOST = os.getenv("PYTEST_HOST", "localhost")
 PORT = int(os.getenv("PYTEST_PORT", "3306"))
-CHARSET = os.getenv("PYTEST_CHARSET", "utf8")
+CHARSET = os.getenv("PYTEST_CHARSET", "utf8mb4")
 SSH_USER = os.getenv("PYTEST_SSH_USER", None)
 SSH_HOST = os.getenv("PYTEST_SSH_HOST", None)
 SSH_PORT = int(os.getenv("PYTEST_SSH_PORT", "22"))
@@ -47,13 +48,17 @@ def create_db(dbname):
 
 def run(executor, sql, rows_as_list=True):
     """Return string output for the sql to be run."""
-    result = []
+    results = []
 
-    for title, rows, headers, status in executor.run(sql):
+    for result in executor.run(sql):
+        title = result.title
+        rows = result.results
+        headers = result.headers
+        status = result.status
         rows = list(rows) if (rows_as_list and rows) else rows
-        result.append({"title": title, "rows": rows, "headers": headers, "status": status})
+        results.append({"title": title, "rows": rows, "headers": headers, "status": status})
 
-    return result
+    return results
 
 
 def set_expanded_output(is_expanded):
