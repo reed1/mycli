@@ -20,9 +20,9 @@ def add_custom_key_bindings(kb, mycli):
         """Select active schema"""
         _logger.debug("Detected <C-b> key.")
         query = "SELECT schema_name FROM information_schema.schemata"
-        [[_,cur,_,_]] = mycli.sqlexecute.run(query)
-        schemas = [row[0] for row in cur.fetchall()]
-        filtereds = sorted([e for e in schemas if  e != "information_schema"])
+        [result] = mycli.sqlexecute.run(query)
+        schemas = [row[0] for row in result.results.fetchall()]
+        filtereds = sorted([e for e in schemas if e != "information_schema"])
         sorteds = custom_sort_schemas(filtereds)
         schema = subprocess.run(
             ["rofi", "-dmenu", "-p", "Select schema"],
@@ -34,8 +34,9 @@ def add_custom_key_bindings(kb, mycli):
             return
         persists_last_schema(schema)
         buff = event.app.current_buffer
-        buff.text = f'use {schema};'
+        buff.text = f"use {schema};"
         buff.validate_and_handle()
+
 
 def custom_sort_schemas(schemas):
     def custom_sort_key(s):
@@ -51,7 +52,8 @@ def custom_sort_schemas(schemas):
                 res.append({str(x): str(9 - x) for x in range(10)}[part])
             else:
                 res.append(part)
-        return ''.join(res)
+        return "".join(res)
+
     return sorted(schemas, key=custom_sort_key)
 
 

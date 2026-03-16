@@ -55,12 +55,12 @@ def _run_watch_loop(mycli, watch_command, timing):
 
                 results = []
                 current_data = []
-                for title, cur, headers, status in res:
-                    if cur:
-                        rows = list(cur)
+                for r in res:
+                    if r.results:
+                        rows = list(r.results)
                     else:
                         rows = None
-                    results.append((title, rows, headers, status))
+                    results.append((r.title, rows, r.headers, r.status))
                     current_data.append((rows, headers))
 
                 execution_time = time() - start
