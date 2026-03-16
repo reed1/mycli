@@ -1,17 +1,25 @@
+import logging
 import os
-import subprocess
+
+import click
+import pymysql
+from pymysql.cursors import Cursor
+
+logger = logging.getLogger(__name__)
+
+CACHED_SSL_VERSION: dict[tuple, str | None] = {}
 
 
-def handle_cd_command(arg: str) -> tuple[bool, str | None]:
+def handle_cd_command(command: list[str]) -> tuple[bool, str | None]:
     """Handles a `cd` shell command by calling python's os.chdir."""
-    CD_CMD = "cd"
-    tokens = arg.split(CD_CMD + " ")
-    directory = tokens[-1] if len(tokens) > 1 else None
-    if not directory:
-        return False, "No folder name was provided."
+    if not command[0].lower() == 'cd':
+        return False, 'Not a cd command.'
+    if len(command) != 2:
+        return False, 'Exactly one directory name must be provided.'
+    directory = command[1]
     try:
         os.chdir(directory)
-        subprocess.call(["pwd"])
+        click.echo(os.getcwd(), err=True)
         return True, None
     except OSError as e:
         return False, e.strerror
@@ -46,3 +54,59 @@ def format_uptime(uptime_in_seconds: str) -> str:
 
     uptime = " ".join(uptime_values)
     return uptime
+
+
+def get_uptime(cur: Cursor) -> int:
+    query = 'SHOW STATUS LIKE "Uptime"'
+    logger.debug(query)
+
+    uptime = 0
+
+    try:
+        cur.execute(query)
+        if one := cur.fetchone():
+            uptime = int(one[1] or 0)
+    except pymysql.err.OperationalError:
+        pass
+
+    return uptime
+
+
+def get_warning_count(cur: Cursor) -> int:
+    query = 'SHOW COUNT(*) WARNINGS'
+    logger.debug(query)
+
+    warning_count = 0
+
+    try:
+        cur.execute(query)
+        if one := cur.fetchone():
+            warning_count = int(one[0] or 0)
+    except pymysql.err.OperationalError:
+        pass
+
+    return warning_count
+
+
+def get_ssl_version(cur: Cursor) -> str | None:
+    cache_key = (id(cur.connection), cur.connection.thread_id())
+
+    if cache_key in CACHED_SSL_VERSION:
+        return CACHED_SSL_VERSION[cache_key] or None
+
+    query = 'SHOW STATUS LIKE "Ssl_version"'
+    logger.debug(query)
+
+    ssl_version = None
+
+    try:
+        cur.execute(query)
+        if one := cur.fetchone():
+            CACHED_SSL_VERSION[cache_key] = one[1]
+            ssl_version = one[1] or None
+        else:
+            CACHED_SSL_VERSION[cache_key] = ''
+    except pymysql.err.OperationalError:
+        pass
+
+    return ssl_version

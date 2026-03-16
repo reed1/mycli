@@ -8,7 +8,7 @@ from pymysql.cursors import Cursor
 from mycli import __version__
 from mycli.packages.special import iocommands
 from mycli.packages.special.main import ArgType, special_command
-from mycli.packages.special.utils import format_uptime
+from mycli.packages.special.utils import format_uptime, get_ssl_version
 from mycli.packages.sqlresult import SQLResult
 
 logger = logging.getLogger(__name__)
@@ -27,25 +27,24 @@ def list_tables(
         query = "SHOW TABLES"
     logger.debug(query)
     cur.execute(query)
-    status = ""
     if cur.description:
-        headers = [x[0] for x in cur.description]
+        header = [x[0] for x in cur.description]
     else:
-        return [SQLResult(status="")]
+        return [SQLResult()]
 
     # Fetch results before potentially executing another query
     results = list(cur.fetchall()) if verbose and arg else cur
 
+    postamble = ''
     if verbose and arg:
         query = f'SHOW CREATE TABLE {arg}'
         logger.debug(query)
         cur.execute(query)
         if one := cur.fetchone():
-            # Returning the SHOW CREATE TABLE as a "status" keeps it unformatted,
-            # which is a hack.  There should be an unformmatted_results argument.
-            status = one[1]
+            postamble = one[1]
 
-    return [SQLResult(results=results, headers=headers, status=status)]
+    # todo missing a status line because sqlexecute.get_result was not used
+    return [SQLResult(header=header, rows=results, postamble=postamble)]
 
 
 @special_command("\\l", "\\l", "List databases.", arg_type=ArgType.RAW_QUERY, case_sensitive=True)
@@ -54,14 +53,15 @@ def list_databases(cur: Cursor, **_) -> list[SQLResult]:
     logger.debug(query)
     cur.execute(query)
     if cur.description:
-        headers = [x[0] for x in cur.description]
-        return [SQLResult(results=cur, headers=headers, status="")]
+        header = [x[0] for x in cur.description]
+        # todo missing a status line because sqlexecute.get_result was not used
+        return [SQLResult(header=header, rows=cur)]
     else:
-        return [SQLResult(status="")]
+        return [SQLResult()]
 
 
 @special_command(
-    "status", "\\s", "Get status information from the server.", arg_type=ArgType.RAW_QUERY, aliases=["\\s"], case_sensitive=True
+    "status", "status", "Get status information from the server.", arg_type=ArgType.RAW_QUERY, aliases=["\\s"], case_sensitive=True
 )
 def status(cur: Cursor, **_) -> list[SQLResult]:
     query = "SHOW GLOBAL STATUS;"
@@ -86,11 +86,11 @@ def status(cur: Cursor, **_) -> list[SQLResult]:
         status = {k.decode("utf-8"): v.decode("utf-8") for k, v in status.items()}
 
     # Create output buffers.
-    title = []
+    preamble = []
     output = []
     footer = []
 
-    title.append("--------------")
+    preamble.append("--------------")
 
     # Output the mycli client information.
     implementation = platform.python_implementation()
@@ -98,7 +98,7 @@ def status(cur: Cursor, **_) -> list[SQLResult]:
     client_info = []
     client_info.append(f'mycli {__version__}')
     client_info.append(f'running on {implementation} {version}')
-    title.append(" ".join(client_info) + "\n")
+    preamble.append(" ".join(client_info) + "\n")
 
     # Build the output that will be displayed as a table.
     output.append(("Connection id:", cur.connection.thread_id()))
@@ -126,8 +126,9 @@ def status(cur: Cursor, **_) -> list[SQLResult]:
 
     output.append(("Server version:", f'{variables["version"]} {variables["version_comment"]}'))
     output.append(("Protocol version:", variables["protocol_version"]))
+    output.append(('SSL/TLS version:', get_ssl_version(cur)))
 
-    if "unix" in cur.connection.host_info.lower():
+    if getattr(cur.connection, 'unix_socket', None):
         host_info = cur.connection.host_info
     else:
         host_info = f'{cur.connection.host} via TCP/IP'
@@ -146,10 +147,10 @@ def status(cur: Cursor, **_) -> list[SQLResult]:
     output.append(("Client characterset:", charset[2]))
     output.append(("Conn. characterset:", charset[3]))
 
-    if "TCP/IP" in host_info:
-        output.append(("TCP port:", cur.connection.port))
+    if getattr(cur.connection, 'unix_socket', None):
+        output.append(('UNIX socket:', variables['socket']))
     else:
-        output.append(("UNIX socket:", variables["socket"]))
+        output.append(('TCP port:', cur.connection.port))
 
     if "Uptime" in status:
         output.append(("Uptime:", format_uptime(status["Uptime"])))
@@ -172,4 +173,5 @@ def status(cur: Cursor, **_) -> list[SQLResult]:
         footer.append("\n" + stats_str)
 
     footer.append("--------------")
-    return [SQLResult(title="\n".join(title), results=output, headers="", status="\n".join(footer))]
+
+    return [SQLResult(preamble="\n".join(preamble), rows=output, postamble="\n".join(footer))]

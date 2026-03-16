@@ -743,7 +743,150 @@ class SQLCompleter(Completer):
         "ZEROFILL",
     ]
 
-    functions = [x.upper() for x in MYSQL_FUNCTIONS]
+    # misclassified as keywords
+    # do they need to also be subtracted from keywords?
+    pygments_misclassified_functions = [
+        'ASCII',
+        'AVG',
+        'CHARSET',
+        'COALESCE',
+        'COLLATION',
+        'CONVERT',
+        'CUME_DIST',
+        'CURRENT_DATE',
+        'CURRENT_TIME',
+        'CURRENT_TIMESTAMP',
+        'CURRENT_USER',
+        'DATABASE',
+        'DAY',
+        'DEFAULT',
+        'DENSE_RANK',
+        'EXISTS',
+        'FIRST_VALUE',
+        'FORMAT',
+        'GEOMCOLLECTION',
+        'GET_FORMAT',
+        'GROUPING',
+        'HOUR',
+        'IF',
+        'INSERT',
+        'INTERVAL',
+        'JSON_TABLE',
+        'JSON_VALUE',
+        'LAG',
+        'LAST_VALUE',
+        'LEAD',
+        'LEFT',
+        'LOCALTIME',
+        'LOCALTIMESTAMP',
+        'MATCH',
+        'MICROSECOND',
+        'MINUTE',
+        'MOD',
+        'MONTH',
+        'NTH_VALUE',
+        'NTILE',
+        'PERCENT_RANK',
+        'QUARTER',
+        'RANK',
+        'REPEAT',
+        'REPLACE',
+        'REVERSE',
+        'RIGHT',
+        'ROW_COUNT',
+        'ROW_NUMBER',
+        'SCHEMA',
+        'SECOND',
+        'TIMESTAMPADD',
+        'TIMESTAMPDIFF',
+        'TRUNCATE',
+        'USER',
+        'UTC_DATE',
+        'UTC_TIME',
+        'UTC_TIMESTAMP',
+        'VALUES',
+        'WEEK',
+        'WEIGHT_STRING',
+    ]
+
+    # should case be respected for functions styled as CamelCase?
+    pygments_missing_functions = [
+        'BINARY',  # deprecated function, but available everywhere
+        'CHAR',
+        'DATE',
+        'DISTANCE',
+        'ETAG',
+        'GeometryCollection',
+        'JSON_DUALITY_OBJECT',
+        'LineString',
+        'MultiLineString',
+        'MultiPoint',
+        'MultiPolygon',
+        'Point',
+        'Polygon',
+        'STRING_TO_VECTOR',
+        'TIME',
+        'TIMESTAMP',
+        'VECTOR_DIM',
+        'VECTOR_TO_STRING',
+        'YEAR',
+    ]
+
+    # so far an incomplete list
+    # these should be spun out and completed independently from functions in the value position
+    pygments_value_position_nonfunction_keywords = [
+        'BETWEEN',
+        'CASE',
+        'DISTINCT',
+        'FALSE',
+        'NOT',
+        'NULL',
+        'TRUE',
+    ]
+
+    # should https://dev.mysql.com/doc/refman/9.6/en/loadable-function-reference.html also be added?
+    pygments_functions_supplemented = sorted(
+        [x.upper() for x in MYSQL_FUNCTIONS]
+        + [x.upper() for x in pygments_misclassified_functions]
+        + [x.upper() for x in pygments_missing_functions]
+        + [x.upper() for x in pygments_value_position_nonfunction_keywords]
+    )
+
+    favorite_functions = [
+        'COUNT',
+        'CONVERT',
+        'BINARY',
+        'CAST',
+        'COALESCE',
+        'MAX',
+        'MIN',
+        'SUM',
+        'AVG',
+        'JSON_EXTRACT',
+        'JSON_VALUE',
+        'JSON_REMOVE',
+        'JSON_SET',
+        'CONCAT',
+        'GROUP_CONCAT',
+        'CHAR_LENGTH',
+        'ROUND',
+        'FLOOR',
+        'CEIL',
+        'IF',
+        'IFNULL',
+        'SUBSTR',
+        'SUBSTRING_INDEX',
+        'REPLACE',
+        'RIGHT',
+        'LEFT',
+        'UNIX_TIMESTAMP',
+        'FROM_UNIXTIME',
+        'RAND',
+        'DATEDIFF',
+        'DATE_SUB',
+    ]
+    functions_raw = favorite_functions + pygments_functions_supplemented
+    functions = list(dict.fromkeys(functions_raw))
 
     # https://docs.pingcap.com/tidb/dev/tidb-functions
     tidb_functions = [
@@ -783,6 +926,10 @@ class SQLCompleter(Completer):
     ]
 
     users: list[str] = []
+
+    character_sets: list[str] = []
+
+    collations: list[str] = []
 
     def __init__(
         self,
@@ -943,12 +1090,32 @@ class SQLCompleter(Completer):
                 continue
             metadata[self.dbname][elt[0]] = None
 
+    def extend_character_sets(self, character_set_data: Generator[tuple]) -> None:
+        for elt in character_set_data:
+            if not elt:
+                continue
+            if not elt[0]:
+                continue
+            self.character_sets.append(elt[0])
+            self.all_completions.update(elt[0])
+
+    def extend_collations(self, collation_data: Generator[tuple]) -> None:
+        for elt in collation_data:
+            if not elt:
+                continue
+            if not elt[0]:
+                continue
+            self.collations.append(elt[0])
+            self.all_completions.update(elt[0])
+
     def set_dbname(self, dbname: str | None) -> None:
         self.dbname = dbname or ''
 
     def reset_completions(self) -> None:
         self.databases: list[str] = []
         self.users: list[str] = []
+        self.character_sets: list[str] = []
+        self.collations: list[str] = []
         self.show_items: list[Completion] = []
         self.dbname = ""
         self.dbmetadata: dict[str, Any] = {
@@ -1164,6 +1331,31 @@ class SQLCompleter(Completer):
                 )
                 completions.extend([(*x, rank) for x in procs_m])
 
+            elif suggestion['type'] == 'introducer':
+                introducers = [f'_{x}' for x in self.character_sets]
+                introducers_m = self.find_matches(
+                    word_before_cursor,
+                    introducers,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in introducers_m])
+
+            elif suggestion['type'] == 'character_set':
+                charsets_m = self.find_matches(
+                    word_before_cursor,
+                    self.character_sets,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in charsets_m])
+
+            elif suggestion['type'] == 'collation':
+                collations_m = self.find_matches(
+                    word_before_cursor,
+                    self.collations,
+                    text_before_cursor=document.text_before_cursor,
+                )
+                completions.extend([(*x, rank) for x in collations_m])
+
             elif suggestion["type"] == "table":
                 # If this is a select and columns are given, parse the columns and
                 # then only return tables that have one or more of the given columns.
@@ -1297,6 +1489,7 @@ class SQLCompleter(Completer):
                     text_before_cursor=document.text_before_cursor,
                 )
                 completions.extend([(*x, rank) for x in subcommands_m])
+
             elif suggestion["type"] == "enum_value":
                 enum_values = self.populate_enum_values(
                     suggestion["tables"],

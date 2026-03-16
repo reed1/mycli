@@ -7,6 +7,7 @@ import re
 import ssl
 from typing import Any, Generator, Iterable
 
+from prompt_toolkit.formatted_text import FormattedText
 import pymysql
 from pymysql.connections import Connection
 from pymysql.constants import FIELD_TYPE
@@ -116,6 +117,10 @@ class SQLExecute:
     procedures_query = '''SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
     WHERE ROUTINE_TYPE="PROCEDURE" AND ROUTINE_SCHEMA = %s'''
 
+    character_sets_query = '''SHOW CHARACTER SET'''
+
+    collations_query = '''SHOW COLLATION'''
+
     table_columns_query = """select TABLE_NAME, COLUMN_NAME from information_schema.columns
                                     where table_schema = %s
                                     order by table_name,ordinal_position"""
@@ -170,7 +175,7 @@ class SQLExecute:
         host: str | None,
         port: int | None,
         socket: str | None,
-        charset: str | None,
+        character_set: str | None,
         local_infile: bool | None,
         ssl: dict[str, Any] | None,
         ssh_user: str | None,
@@ -187,7 +192,7 @@ class SQLExecute:
         self.host = host
         self.port = port
         self.socket = socket
-        self.charset = charset
+        self.character_set = character_set
         self.local_infile = local_infile
         self.ssl = ssl
         self.server_info: ServerInfo | None = None
@@ -210,7 +215,7 @@ class SQLExecute:
         host: str | None = None,
         port: int | None = None,
         socket: str | None = None,
-        charset: str | None = None,
+        character_set: str | None = None,
         local_infile: bool | None = None,
         ssl: dict[str, Any] | None = None,
         ssh_host: str | None = None,
@@ -227,7 +232,7 @@ class SQLExecute:
         host = host if host is not None else self.host
         port = port if port is not None else self.port
         socket = socket if socket is not None else self.socket
-        charset = charset if charset is not None else self.charset
+        character_set = character_set if character_set is not None else self.character_set
         local_infile = local_infile if local_infile is not None else self.local_infile
         ssl = ssl if ssl is not None else self.ssl
         ssh_user = ssh_user if ssh_user is not None else self.ssh_user
@@ -244,7 +249,7 @@ class SQLExecute:
             "\thost: %r"
             "\tport: %r"
             "\tsocket: %r"
-            "\tcharset: %r"
+            "\tcharacter_set: %r"
             "\tlocal_infile: %r"
             "\tssl: %r"
             "\tssh_user: %r"
@@ -259,7 +264,7 @@ class SQLExecute:
             host,
             port,
             socket,
-            charset,
+            character_set,
             local_infile,
             ssl,
             ssh_user,
@@ -299,7 +304,7 @@ class SQLExecute:
             port=port or 0,
             unix_socket=socket,
             use_unicode=True,
-            charset=charset or '',
+            charset=character_set or '',
             autocommit=True,
             client_flag=client_flag,
             local_infile=local_infile or False,
@@ -345,7 +350,7 @@ class SQLExecute:
         self.host = host
         self.port = port
         self.socket = socket
-        self.charset = charset
+        self.character_set = character_set
         self.ssl = ssl
         self.init_command = init_command
         self.unbuffered = unbuffered
@@ -354,10 +359,7 @@ class SQLExecute:
         self.server_info = ServerInfo.from_version_string(conn.server_version)  # type: ignore[attr-defined]
 
     def run(self, statement: str) -> Generator[SQLResult, None, None]:
-        """Execute the sql in the database and return the results. The results
-        are a list of tuples. Each tuple has 4 values
-        (title, rows, headers, status).
-        """
+        """Execute the sql in the database and return the results."""
 
         # Remove spaces and EOL
         statement = statement.strip()
@@ -404,23 +406,26 @@ class SQLExecute:
 
     def get_result(self, cursor: Cursor) -> SQLResult:
         """Get the current result's data from the cursor."""
-        title = headers = None
+        preamble = header = None
 
         # cursor.description is not None for queries that return result sets,
         # e.g. SELECT or SHOW.
         plural = '' if cursor.rowcount == 1 else 's'
         if cursor.description:
-            headers = [x[0] for x in cursor.description]
-            status = f'{cursor.rowcount} row{plural} in set'
+            header = [x[0] for x in cursor.description]
+            status = FormattedText([('', f'{cursor.rowcount} row{plural} in set')])
         else:
             _logger.debug("No rows in result.")
-            status = f'Query OK, {cursor.rowcount} row{plural} affected'
+            status = FormattedText([('', f'Query OK, {cursor.rowcount} row{plural} affected')])
 
         if cursor.warning_count > 0:
             plural = '' if cursor.warning_count == 1 else 's'
-            status = f'{status}, {cursor.warning_count} warning{plural}'
+            comma = FormattedText([('', ', ')])
+            warning_count = FormattedText([('class:output.status.warning-count', f'{cursor.warning_count} warning{plural}')])
+            status.extend(comma)
+            status.extend(warning_count)
 
-        return SQLResult(title=title, results=cursor, headers=headers, status=status)
+        return SQLResult(preamble=preamble, header=header, rows=cursor, status=status)
 
     def tables(self) -> Generator[tuple[str], None, None]:
         """Yields table names"""
@@ -480,6 +485,34 @@ class SQLExecute:
             else:
                 yield from cur
 
+    def character_sets(self) -> Generator[tuple, None, None]:
+        """Yields tuples of (character_set_name, )"""
+
+        assert isinstance(self.conn, Connection)
+        with self.conn.cursor() as cur:
+            _logger.debug("Character sets Query. sql: %r", self.character_sets_query)
+            try:
+                cur.execute(self.character_sets_query)
+            except pymysql.DatabaseError as e:
+                _logger.error('No character_set completions due to %r', e)
+                yield ()
+            else:
+                yield from cur
+
+    def collations(self) -> Generator[tuple, None, None]:
+        """Yields tuples of (collation_name, )"""
+
+        assert isinstance(self.conn, Connection)
+        with self.conn.cursor() as cur:
+            _logger.debug("Collations Query. sql: %r", self.collations_query)
+            try:
+                cur.execute(self.collations_query)
+            except pymysql.DatabaseError as e:
+                _logger.error('No collations completions due to %r', e)
+                yield ()
+            else:
+                yield from cur
+
     def show_candidates(self) -> Generator[tuple, None, None]:
         assert isinstance(self.conn, Connection)
         with self.conn.cursor() as cur:
@@ -526,7 +559,7 @@ class SQLExecute:
         try:
             results = self.run("select connection_id()")
             for result in results:
-                cur = result.results
+                cur = result.rows
                 if isinstance(cur, Cursor):
                     v = cur.fetchone()
                     self.connection_id = v[0] if v is not None else -1

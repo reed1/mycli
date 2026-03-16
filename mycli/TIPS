@@ -16,7 +16,7 @@ the --throttle option helps slow down queries in batch mode!
 
 the --password-file option can be used with a FIFO to avoid saving creds to a file!
 
-the --charset option sets the character set for a single session!
+the --character-set option sets the character set for a single session!
 
 the --unbuffered flag can save memory when in batch mode!
 
@@ -38,6 +38,8 @@ the --init-command option lets you execute initialization SQL before a session!
 
 the --login-path option lets you work with login-path files!
 
+--keepalive-ticks=<num> sets keepalive pings for a single session!
+
 ###
 ### commands
 ###
@@ -48,7 +50,11 @@ copy a query to the clipboard using \clip at the end of the query!
 
 \dt lists tables; \dt <table> describes <table>!
 
-edit a query in an external editor using \e!
+edit a query in an external editor using <query>\edit!
+
+edit a query in an external editor using \edit <filename>!
+
+set "export VISUAL='code --wait'" in your shell to `\edit` queries using VS Code!
 
 \f lists favorite queries; \f <name> executes a favorite!
 
@@ -71,6 +77,8 @@ edit a query in an external editor using \e!
 \q, "quit", or "exit" exits from the prompt!
 
 \? or "help" for help!
+
+"help <keyword>" for help on SQL keywords!
 
 \n or "nopager" to disable the pager!
 
@@ -100,17 +108,23 @@ use "system <command>" to execute a shell command!
 
 the "watch" command executes a query every N seconds!
 
+use \bug to file a bug on GitHub!
+
 ###
 ### general
 ###
 
 display query output vertically using \G at the end of a query!
 
+run SQL scripts in batch mode using the standard input!
+
 ###
 ### keystrokes
 ###
 
 edit a query in an external editor using keystrokes control-x + control-e!
+
+open a documentation browser using keystroke F1!
 
 toggle smart completion using keystroke F2!
 
@@ -119,6 +133,10 @@ toggle multi-line mode using keystroke F3!
 toggle vi mode using keystroke F4!
 
 complete at cursor using the tab key!
+
+summon completion candidates using control-space!
+
+control-space works well with "min_completion_trigger" in ~/.myclirc!
 
 prettify a query using keystrokes control-x + p!
 
@@ -135,6 +153,10 @@ insert the quoted current date using keystrokes control-o + control-t!
 search query history using keystroke control-r!
 
 use keystroke control-g to cancel completion popups!
+
+use keystroke right-arrow to accept a full-line suggestion from your history!
+
+cancel history search using keystrokes Escape or control-g!
 
 ###
 ### myclirc options
@@ -207,6 +229,10 @@ create DSN shortcuts using the "[alias_dsn]" section in ~/.myclirc!
 set up per-DSN initial commands using the "[alias_dsn.init-commands]" section in ~/.myclirc!
 
 set up connection defaults using the "[connection]" section in ~/.myclirc!
+
+use "min_completion_trigger" in ~/.myclirc to defer completions!
+
+colorize search previews with "highlight_preview" in ~/.myclirc!
 
 ###
 ### redirection

@@ -5,8 +5,7 @@ description = "CLI for MySQL Database. With auto-completion and syntax highlight
 readme = "README.md"
 requires-python = ">=3.10"
 license = "BSD-3-Clause"
-authors = [{ name = "Mycli Core Team", email = "mycli-dev@googlegroups.com" }]
-urls = { homepage = "http://mycli.net" }
+authors = [{ name = "Mycli Core Team" }]
 
 dependencies = [
     "click ~= 8.3.1",
@@ -15,15 +14,23 @@ dependencies = [
     "prompt_toolkit>=3.0.6,<4.0.0",
     "PyMySQL ~= 1.1.2",
     "sqlparse>=0.3.0,<0.6.0",
-    "sqlglot[rs] == 27.*",
+    "sqlglot[c] ~= 29.0.1",
     "configobj ~= 5.0.9",
-    "cli_helpers[styles] ~= 2.10.1",
+    "cli_helpers[styles] ~= 2.11.0",
+    "wcwidth ~= 0.6.0",
     "pyperclip ~= 1.11.0",
     "pycryptodomex ~= 3.23.0",
     "pyfzf ~= 0.3.1",
     "rapidfuzz ~= 3.14.3",
     "keyring ~= 25.7.0",
 ]
+
+[project.urls]
+Homepage = 'https://mycli.net'
+Documentation = 'https://mycli.net/docs'
+Source = 'https://github.com/dbcli/mycli'
+Issues = 'https://github.com/dbcli/mycli/issues'
+Changelog = 'https://github.com/dbcli/mycli/blob/main/changelog.md'
 
 [build-system]
 requires = ["setuptools>=64.0", "setuptools-scm>=8"]

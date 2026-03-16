@@ -3,7 +3,9 @@ from enum import Enum
 import logging
 import os
 from typing import Callable
+import webbrowser
 
+from mycli.constants import DOCS_URL, ISSUES_URL
 from mycli.packages.sqlresult import SQLResult
 
 try:
@@ -26,11 +28,12 @@ SpecialCommand = namedtuple(
     [
         "handler",
         "command",
-        "shortcut",
+        "usage",
         "description",
         "arg_type",
         "hidden",
         "case_sensitive",
+        "shortcut",
     ],
 )
 
@@ -64,7 +67,7 @@ def parse_special_command(sql: str) -> tuple[str, Verbosity, str]:
 
 def special_command(
     command: str,
-    shortcut: str | None,
+    usage: str | None,
     description: str,
     arg_type: ArgType = ArgType.PARSED_QUERY,
     hidden: bool = False,
@@ -75,7 +78,7 @@ def special_command(
         register_special_command(
             wrapped,
             command,
-            shortcut,
+            usage,
             description,
             arg_type=arg_type,
             hidden=hidden,
@@ -90,7 +93,7 @@ def special_command(
 def register_special_command(
     handler: Callable,
     command: str,
-    shortcut: str | None,
+    usage: str | None,
     description: str,
     arg_type: ArgType = ArgType.PARSED_QUERY,
     hidden: bool = False,
@@ -101,11 +104,12 @@ def register_special_command(
     COMMANDS[cmd] = SpecialCommand(
         handler,
         command,
-        shortcut,
+        usage,
         description,
         arg_type=arg_type,
         hidden=hidden,
         case_sensitive=case_sensitive,
+        shortcut=aliases[0] if aliases else None,
     )
     aliases = [] if aliases is None else aliases
     for alias in aliases:
@@ -113,11 +117,12 @@ def register_special_command(
         COMMANDS[cmd] = SpecialCommand(
             handler,
             command,
-            shortcut,
+            usage,
             description,
             arg_type=arg_type,
             case_sensitive=case_sensitive,
             hidden=True,
+            shortcut=None,
         )
 
 
@@ -128,7 +133,7 @@ def execute(cur: Cursor, sql: str) -> list[SQLResult]:
     command, verbosity, arg = parse_special_command(sql)
 
     if (command not in COMMANDS) and (command.lower() not in COMMANDS):
-        raise CommandNotFound()
+        raise CommandNotFound(f'Command not found: {command}')
 
     try:
         special_cmd = COMMANDS[command]
@@ -152,50 +157,77 @@ def execute(cur: Cursor, sql: str) -> list[SQLResult]:
     raise CommandNotFound(f"Command type not found: {command}")
 
 
-@special_command("help", "\\?", "Show this help.", arg_type=ArgType.NO_QUERY, aliases=["\\?", "?"])
+@special_command(
+    "help", "help [term]", "Show this help, or search for a term on the server.", arg_type=ArgType.NO_QUERY, aliases=["\\?", "?"]
+)
 def show_help(*_args) -> list[SQLResult]:
-    headers = ["Command", "Shortcut", "Description"]
+    header = ["Command", "Shortcut", "Usage", "Description"]
     result = []
 
     for _, value in sorted(COMMANDS.items()):
         if not value.hidden:
-            result.append((value.command, value.shortcut, value.description))
-    return [SQLResult(results=result, headers=headers)]
+            result.append((value.command, value.shortcut, value.usage, value.description))
+    return [SQLResult(header=header, rows=result, postamble=f'Docs index — {DOCS_URL}')]
 
 
 def show_keyword_help(cur: Cursor, arg: str) -> list[SQLResult]:
     """
-    Call the built-in "show <command>", to display help for an SQL keyword.
+    Call the built-in "show <keyword>", to display help for an SQL keyword.
     :param cur: cursor
     :param arg: string
     :return: list
     """
-    keyword = arg.strip('"').strip("'")
-    query = f"help '{keyword}'"
+    keyword = arg.strip().strip('"\'')
+    query = 'help %s'
     logger.debug(query)
-    cur.execute(query)
+    cur.execute(query, keyword)
     if cur.description and cur.rowcount > 0:
-        headers = [x[0] for x in cur.description]
-        return [SQLResult(results=cur, headers=headers, status="")]
+        header = [x[0] for x in cur.description]
+        return [SQLResult(header=header, rows=cur)]
+    logger.debug(query)
+    cur.execute(query, (f'%{keyword}%',))
+    if cur.description and cur.rowcount > 0:
+        header = [x[0] for x in cur.description]
+        return [SQLResult(preamble='Similar terms:', header=header, rows=cur)]
     else:
-        return [SQLResult(status=f'No help found for {keyword}.')]
+        return [SQLResult(status=f'No help found for "{keyword}".')]
 
 
-@special_command("exit", "\\q", "Exit.", arg_type=ArgType.NO_QUERY, aliases=["\\q"])
-@special_command("quit", "\\q", "Quit.", arg_type=ArgType.NO_QUERY)
+@special_command('\\bug', '\\bug', 'File a bug on GitHub.', arg_type=ArgType.NO_QUERY)
+def file_bug(*_args) -> list[SQLResult]:
+    webbrowser.open_new_tab(ISSUES_URL)
+    return [SQLResult(status=f'{ISSUES_URL} — press "New Issue"')]
+
+
+@special_command("exit", "exit", "Exit.", arg_type=ArgType.NO_QUERY, aliases=["\\q"])
+@special_command("quit", "quit", "Quit.", arg_type=ArgType.NO_QUERY, aliases=["\\q"])
 def quit_(*_args):
     raise EOFError
 
 
-@special_command("\\e", "\\e", "Edit command with editor (uses $EDITOR).", arg_type=ArgType.NO_QUERY, case_sensitive=True)
-@special_command("\\clip", "\\clip", "Copy query to the system clipboard.", arg_type=ArgType.NO_QUERY, case_sensitive=True)
-@special_command("\\G", "\\G", "Display current query results vertically.", arg_type=ArgType.NO_QUERY, case_sensitive=True)
+@special_command(
+    "\\edit",
+    "<query>\\edit | \\edit <filename>",
+    "Edit query with editor (uses $VISUAL or $EDITOR).",
+    arg_type=ArgType.NO_QUERY,
+    case_sensitive=True,
+    aliases=['\\e'],
+)
+@special_command("\\clip", "<query>\\clip", "Copy query to the system clipboard.", arg_type=ArgType.NO_QUERY, case_sensitive=True)
+@special_command("\\G", "<query>\\G", "Display query results vertically.", arg_type=ArgType.NO_QUERY, case_sensitive=True)
 def stub():
     raise NotImplementedError
 
 
 if LLM_IMPORTED:
 
-    @special_command("\\llm", "\\ai", "Interrogate an LLM.", arg_type=ArgType.RAW_QUERY, case_sensitive=True)
+    @special_command(
+        "\\llm",
+        "\\llm [arguments]",
+        "Interrogate an LLM.  See \"\\llm help\".",
+        arg_type=ArgType.RAW_QUERY,
+        case_sensitive=True,
+        aliases=["\\ai"],
+    )
     def llm_stub():
         raise NotImplementedError

@@ -1,36 +1,37 @@
-+----------------+----------------------------+------------------------------------------------------------+
-| Command        | Shortcut                   | Description                                                |
-+----------------+----------------------------+------------------------------------------------------------+
-| \G             | \G                         | Display current query results vertically.                  |
-| \clip          | \clip                      | Copy query to the system clipboard.                        |
-| \dt            | \dt[+] [table]             | List or describe tables.                                   |
-| \e             | \e                         | Edit command with editor (uses $EDITOR).                   |
-| \f             | \f [name [args..]]         | List or execute favorite queries.                          |
-| \fd            | \fd [name]                 | Delete a favorite query.                                   |
-| \fs            | \fs name query             | Save a favorite query.                                     |
-| \l             | \l                         | List databases.                                            |
-| \llm           | \ai                        | Interrogate an LLM.                                        |
-| \once          | \o [-o] filename           | Append next result to an output file (overwrite using -o). |
-| \pipe_once     | \| command                 | Send next result to a subprocess.                          |
-| \timing        | \t                         | Toggle timing of commands.                                 |
-| connect        | \r                         | Reconnect to the database. Optional database argument.     |
-| delimiter      | <nope>                     | Change SQL delimiter.                                      |
-| exit           | \q                         | Exit.                                                      |
-| help           | \?                         | Show this help.                                            |
-| nopager        | \n                         | Disable pager, print to stdout.                            |
-| notee          | notee                      | Stop writing results to an output file.                    |
-| nowarnings     | \w                         | Disable automatic warnings display.                        |
-| pager          | \P [command]               | Set PAGER. Print the query results via PAGER.              |
-| prompt         | \R                         | Change prompt format.                                      |
-| quit           | \q                         | Quit.                                                      |
-| redirectformat | \Tr                        | Change the table format used to output redirected results. |
-| rehash         | \#                         | Refresh auto-completions.                                  |
-| source         | \. filename                | Execute commands from file.                                |
-| status         | \s                         | Get status information from the server.                    |
-| system         | system [command]           | Execute a system shell commmand.                           |
-| tableformat    | \T                         | Change the table format used to output results.            |
-| tee            | tee [-o] filename          | Append all results to an output file (overwrite using -o). |
-| use            | \u                         | Change to a new database.                                  |
-| warnings       | \W                         | Enable automatic warnings display.                         |
-| watch          | watch [seconds] [-c] query | Executes the query every [seconds] seconds (by default 5). |
-+----------------+----------------------------+------------------------------------------------------------+
++----------------+----------+---------------------------------+-------------------------------------------------------------+
+| Command        | Shortcut | Usage                           | Description                                                 |
++----------------+----------+---------------------------------+-------------------------------------------------------------+
+| \G             | <null>   | <query>\G                       | Display query results vertically.                           |
+| \bug           | <null>   | \bug                            | File a bug on GitHub.                                       |
+| \clip          | <null>   | <query>\clip                    | Copy query to the system clipboard.                         |
+| \dt            | <null>   | \dt[+] [table]                  | List or describe tables.                                    |
+| \edit          | \e       | <query>\edit | \edit <filename> | Edit query with editor (uses $VISUAL or $EDITOR).           |
+| \f             | <null>   | \f [name [args..]]              | List or execute favorite queries.                           |
+| \fd            | <null>   | \fd <name>                      | Delete a favorite query.                                    |
+| \fs            | <null>   | \fs <name> <query>              | Save a favorite query.                                      |
+| \l             | <null>   | \l                              | List databases.                                             |
+| \llm           | \ai      | \llm [arguments]                | Interrogate an LLM.  See "\llm help".                       |
+| \once          | \o       | \once [-o] <filename>           | Append next result to an output file (overwrite using -o).  |
+| \pipe_once     | \|       | \pipe_once <command>            | Send next result to a subprocess.                           |
+| \timing        | \t       | \timing                         | Toggle timing of queries.                                   |
+| connect        | \r       | connect [database]              | Reconnect to the server, optionally switching databases.    |
+| delimiter      | <null>   | delimiter <string>              | Change end-of-statement delimiter.                          |
+| exit           | \q       | exit                            | Exit.                                                       |
+| help           | \?       | help [term]                     | Show this help, or search for a term on the server.         |
+| nopager        | \n       | nopager                         | Disable pager; print to stdout.                             |
+| notee          | <null>   | notee                           | Stop writing results to an output file.                     |
+| nowarnings     | \w       | nowarnings                      | Disable automatic warnings display.                         |
+| pager          | \P       | pager [command]                 | Set pager to [command]. Print query results via pager.      |
+| prompt         | \R       | prompt <string>                 | Change prompt format.                                       |
+| quit           | \q       | quit                            | Quit.                                                       |
+| redirectformat | \Tr      | redirectformat <format>         | Change the table format used to output redirected results.  |
+| rehash         | \#       | rehash                          | Refresh auto-completions.                                   |
+| source         | \.       | source <filename>               | Execute queries from a file.                                |
+| status         | \s       | status                          | Get status information from the server.                     |
+| system         | <null>   | system [-r] <command>           | Execute a system shell command (raw mode with -r).          |
+| tableformat    | \T       | tableformat <format>            | Change the table format used to output interactive results. |
+| tee            | <null>   | tee [-o] <filename>             | Append all results to an output file (overwrite using -o).  |
+| use            | \u       | use <database>                  | Change to a new database.                                   |
+| warnings       | \W       | warnings                        | Enable automatic warnings display.                          |
+| watch          | <null>   | watch [seconds] [-c] <query>    | Execute query every [seconds] seconds (5 by default).       |
++----------------+----------+---------------------------------+-------------------------------------------------------------+

@@ -33,6 +33,7 @@ except ImportError:
 from pymysql.cursors import Cursor
 
 from mycli.packages.special.main import Verbosity, parse_special_command
+from mycli.packages.sqlresult import SQLResult
 
 log = logging.getLogger(__name__)
 
@@ -225,11 +226,9 @@ def handle_llm(
 ) -> tuple[str, str | None, float]:
     _, verbosity, arg = parse_special_command(text)
     if not LLM_IMPORTED:
-        output = [(None, None, None, NEED_DEPENDENCIES)]
-        raise FinishIteration(output)
-    if not arg.strip():
-        output = [(None, None, None, USAGE)]
-        raise FinishIteration(output)
+        raise FinishIteration(results=[SQLResult(preamble=NEED_DEPENDENCIES)])
+    if arg.strip().lower() in ['', 'help', '?', r'\?']:
+        raise FinishIteration(results=[SQLResult(preamble=USAGE)])
     parts = shlex.split(arg)
     restart = False
     if "-c" in parts:
@@ -256,18 +255,17 @@ def handle_llm(
         if capture_output:
             click.echo("Calling llm command")
             start = time()
-            _, result = run_external_cmd("llm", *args, capture_output=capture_output)
+            _, output = run_external_cmd("llm", *args, capture_output=capture_output)
             end = time()
-            match = re.search(_SQL_CODE_FENCE, result, re.DOTALL)
+            match = re.search(_SQL_CODE_FENCE, output, re.DOTALL)
             if match:
                 sql = match.group(1).strip()
             else:
-                output = [(None, None, None, result)]
-                raise FinishIteration(output)
-            return (result if verbosity == Verbosity.SUCCINCT else "", sql, end - start)
+                raise FinishIteration(results=[SQLResult(preamble=output)])
+            return (output if verbosity == Verbosity.SUCCINCT else "", sql, end - start)
         else:
             run_external_cmd("llm", *args, restart_cli=restart)
-            raise FinishIteration(None)
+            raise FinishIteration(results=None)
     try:
         ensure_mycli_template()
         start = time()
@@ -392,8 +390,6 @@ def sql_using_llm(
         question,
         " ",
     ]
-    click.echo(args[4])
-    click.echo(args[7])
     click.echo("Invoking llm command with schema information and sample data")
     _, result = run_external_cmd("llm", *args, capture_output=True)
     click.echo("Received response from the llm command")

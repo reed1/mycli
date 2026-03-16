@@ -10,10 +10,11 @@ from pymysql import ProgrammingError
 import pytest
 
 import mycli.packages.special
-from test.utils import db_connection, dbtest, send_ctrl_c
+from test.utils import TEMPFILE_PREFIX, db_connection, dbtest, send_ctrl_c
 
 
-def test_set_get_pager():
+def test_set_get_pager(monkeypatch):
+    monkeypatch.setenv('PAGER', '')
     mycli.packages.special.set_pager_enabled(True)
     assert mycli.packages.special.is_pager_enabled()
     mycli.packages.special.set_pager_enabled(False)
@@ -42,15 +43,21 @@ def test_set_get_expanded_output():
     assert not mycli.packages.special.is_expanded_output()
 
 
-def test_editor_command():
+def test_editor_command(monkeypatch):
+    monkeypatch.setenv('EDITOR', 'true')
+    monkeypatch.setenv('VISUAL', 'true')
+
     assert mycli.packages.special.editor_command(r"hello\e")
-    assert mycli.packages.special.editor_command(r"\ehello")
+    assert mycli.packages.special.editor_command(r"hello\edit")
+    assert mycli.packages.special.editor_command(r"\e hello")
+    assert mycli.packages.special.editor_command(r"\edit hello")
+
     assert not mycli.packages.special.editor_command(r"hello")
+    assert not mycli.packages.special.editor_command(r"\ehello")
+    assert not mycli.packages.special.editor_command(r"\edithello")
 
     assert mycli.packages.special.get_filename(r"\e filename") == "filename"
 
-    os.environ["EDITOR"] = "true"
-    os.environ["VISUAL"] = "true"
     if os.name != "nt":
         assert mycli.packages.special.open_external_editor(sql=r"select 1") == ('select 1', None)
     else:
@@ -60,7 +67,7 @@ def test_editor_command():
 def test_tee_command():
     mycli.packages.special.write_tee("hello world")  # write without file set
     # keep Windows from locking the file with delete=False
-    with tempfile.NamedTemporaryFile(delete=False) as f:
+    with tempfile.NamedTemporaryFile(prefix=TEMPFILE_PREFIX, delete=False) as f:
         mycli.packages.special.execute(None, "tee " + f.name)
         mycli.packages.special.write_tee("hello world")
         if os.name == "nt":
@@ -98,7 +105,7 @@ def test_tee_command_error():
         mycli.packages.special.execute(None, "tee")
 
     with pytest.raises(OSError):
-        with tempfile.NamedTemporaryFile() as f:
+        with tempfile.NamedTemporaryFile(prefix=TEMPFILE_PREFIX) as f:
             os.chmod(f.name, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
             mycli.packages.special.execute(None, f"tee {f.name}")
 
@@ -109,7 +116,7 @@ def test_favorite_query():
     with db_connection().cursor() as cur:
         query = 'select "✔"'
         mycli.packages.special.execute(cur, f"\\fs check {query}")
-        assert next(mycli.packages.special.execute(cur, "\\f check")).title == "> " + query
+        assert next(mycli.packages.special.execute(cur, "\\f check")).preamble == "> " + query
 
 
 @dbtest
@@ -118,9 +125,9 @@ def test_special_favorite_query():
     with db_connection().cursor() as cur:
         query = r'\?'
         mycli.packages.special.execute(cur, rf"\fs special {query}")
-        assert (r'\G', r'\G', 'Display current query results vertically.') in next(
+        assert (r'\G', None, r'<query>\G', 'Display query results vertically.') in next(
             mycli.packages.special.execute(cur, r'\f special')
-        ).results
+        ).rows
 
 
 def test_once_command():
@@ -132,7 +139,7 @@ def test_once_command():
 
     mycli.packages.special.write_once("hello world")  # write without file set
     # keep Windows from locking the file with delete=False
-    with tempfile.NamedTemporaryFile(delete=False) as f:
+    with tempfile.NamedTemporaryFile(prefix=TEMPFILE_PREFIX, delete=False) as f:
         mycli.packages.special.execute(None, "\\once " + f.name)
         mycli.packages.special.write_once("hello world")
         if os.name == "nt":
@@ -170,7 +177,7 @@ def test_pipe_once_command():
         mycli.packages.special.write_once("hello world")
         mycli.packages.special.flush_pipe_once_if_written(None)
     else:
-        with tempfile.NamedTemporaryFile() as f:
+        with tempfile.NamedTemporaryFile(prefix=TEMPFILE_PREFIX) as f:
             mycli.packages.special.execute(None, "\\pipe_once tee " + f.name)
             mycli.packages.special.write_pipe_once("hello world")
             mycli.packages.special.flush_pipe_once_if_written(None)
@@ -209,11 +216,11 @@ def test_watch_query_iteration():
     the desired query and returns the given results."""
     expected_value = "1"
     query = f"SELECT {expected_value}"
-    expected_title = f"> {query}"
+    expected_preamble = f"> {query}"
     with db_connection().cursor() as cur:
         result = next(mycli.packages.special.iocommands.watch_query(arg=query, cur=cur))
-    assert result.title == expected_title
-    assert result.headers[0] == expected_value
+    assert result.preamble == expected_preamble
+    assert result.header[0] == expected_value
 
 
 @dbtest
@@ -232,7 +239,7 @@ def test_watch_query_full():
     wait_interval = 1
     expected_value = "1"
     query = f"SELECT {expected_value}"
-    expected_title = f"> {query}"
+    expected_preamble = f"> {query}"
     expected_results = [4, 5, 6, 7]  # Python 3.14 is skipping ahead to 6 or 7
     ctrl_c_process = send_ctrl_c(wait_interval)
     with db_connection().cursor() as cur:
@@ -240,8 +247,8 @@ def test_watch_query_full():
     ctrl_c_process.join(1)
     assert len(results) in expected_results
     for result in results:
-        assert result.title == expected_title
-        assert result.headers[0] == expected_value
+        assert result.preamble == expected_preamble
+        assert result.header[0] == expected_value
 
 
 @dbtest

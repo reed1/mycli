@@ -65,7 +65,7 @@ class CompletionRefresher:
             e.host,
             e.port,
             e.socket,
-            e.charset,
+            e.character_set,
             e.local_infile,
             e.ssl,
             e.ssh_user,
@@ -158,6 +158,16 @@ def refresh_functions(completer: SQLCompleter, executor: SQLExecute) -> None:
 @refresher("procedures")
 def refresh_procedures(completer: SQLCompleter, executor: SQLExecute) -> None:
     completer.extend_procedures(executor.procedures())
+
+
+@refresher("character_sets")
+def refresh_character_sets(completer: SQLCompleter, executor: SQLExecute) -> None:
+    completer.extend_character_sets(executor.character_sets())
+
+
+@refresher("collations")
+def refresh_collations(completer: SQLCompleter, executor: SQLExecute) -> None:
+    completer.extend_collations(executor.collations())
 
 
 @refresher("special_commands")

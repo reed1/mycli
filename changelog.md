@@ -1,3 +1,231 @@
+1.65.0 (2026/03/16)
+==============
+
+Features
+---------
+* Add prompt format string for literal backslash.
+* Add collation completions, and complete charsets in more positions.
+
+
+Bug Fixes
+---------
+* Suppress warnings when `sqlglotrs` is installed.
+* Improve completions after operators, by recognizing more operators.
+
+
+1.64.0 (2026/03/13)
+==============
+
+Features
+---------
+* Add `-r` raw mode to `system` command.
+* Set timeouts, show exit codes, and improve formatting for `system` commands.
+* Add a dependencies section to `--checkup`.
+
+
+Bug Fixes
+---------
+* Require `sqlglot` 29.x, suppressing a deprecation warning.
+
+
+1.63.0 (2026/03/12)
+==============
+
+Features
+---------
+* Make short toolbar message show after one prompt.
+
+
+Internal
+---------
+* Migrate more repeated values to `constants.py`.
+* Support `sqlglot` 28 and 29.
+
+
+1.62.0 (2026/03/07)
+==============
+
+Features
+---------
+* Dynamic terminal titles based on prompt format strings.
+* Ability to turn off the toolbar.
+* Add completions for introducers on literals.
+* Load whole-line autosuggest candidates in a background thread for speed.
+
+
+Bug Fixes
+---------
+* Improve query cancellation on control-c.
+* Improve refresh of some format strings in the toolbar.
+* Improve keyring storage, requiring re-entering most keyring passwords.
+* Improve sentinel value for `--password` without argument.
+
+
+Internal
+---------
+* Require a more recent version of the `wcwidth` library.
+* Make `safe_invalidate_display` function safer.
+
+
+1.61.0 (2026/03/07)
+==============
+
+Features
+---------
+* Allow shorter timeout lengths after pressing Esc, for vi-mode.
+* Let tab and control-space behaviors be configurable.
+* Add short hostname prompt format string.
+
+
+1.60.0 (2026/03/05)
+==============
+
+Features
+---------
+* Prioritize common functions in the "value" position.
+* Improve value-position keywords.
+* Allow warning-count in status output to be styled.
+
+
+Bug Fixes
+---------
+* Fix crash for completion edge case (#1668).
+* Update to a `cli_helpers` version with a `tabulate` bugfix.
+
+
+1.59.0 (2026/03/03)
+==============
+
+Features
+---------
+* Offer filename completions on more special commands, such as `\edit`.
+* Allow styling of status and timings text.
+* Set up customization of prompt/continuation colors in `~/.myclirc`.
+* Allow customization of the toolbar with prompt format strings.
+* Add warnings-count prompt format strings: `\w` and `\W`.
+* Handle/document more attributes in the `[colors]` section of `~/.myclirc`.
+* Enable customization of table border color/attributes in `~/.myclirc`.
+* Complete much more precisely in the "value" position.
+
+
+Bug Fixes
+---------
+* Make toolbar widths consistent on toggle actions.
+* Don't write ANSI prompt escapes to `tee` output.
+
+
+Internal
+---------
+* Use prompt_toolkit's `bell()`.
+* Refactor `SQLResult` dataclass.
+* Avoid depending on string matches into host info.
+* Add more URL constants.
+* Set `$VISUAL` whenever `$EDITOR` is set.
+* Fix tempfile leak in test suite.
+* Avoid refreshing the prompt unless needed.
+
+
+1.58.0 (2026/02/28)
+==============
+
+Features
+---------
+* Add `\bug` command.
+* Let the `F1` key open a browser to mycli.net/docs and emit help text.
+* Add documentation index URL to inline help.
+* Rewrite bottom toolbar, showing more statuses, but staying compact.
+* Let `help <keyword>` list similar keywords when not found.
+* Optionally highlight fuzzy search previews.
+* Make `\edit` synonymous with the `\e` command.
+* Add environment variable section to `--checkup`.
+
+
+Bug Fixes
+---------
+* Force a prompt_toolkit refresh after fzf history search to avoid display glitches.
+* Include `status` footer in paged output.
+* Ensure fullscreen in fuzzy history search.
+
+
+Documentation
+---------
+* Add `help <keyword>` to TIPS.
+* Refine inline help descriptions.
+* Add `$VISUAL` environment variable hint to TIPS.
+
+
+Internal
+---------
+* Better tests for `null_string` configuration option.
+* Better cleanup of resources in the test suite.
+* Simplify prettify/unprettify handlers.
+* Make prettify/unprettify logic more robust.
+
+
+1.57.0 (2026/02/25)
+==============
+
+Features
+---------
+* Add extra error output on connection failure for possible SSL mismatch (#1584).
+* Bind alternate terminal sequences for function keys F2 - F4.
+* Add `llm help` subcommand.
+* Rewrite `help` table.
+* Remove "info" counter from fzf history-search UI.
+
+
+Bug Fixes
+---------
+* Let interactive changes to the prompt format respect dynamically-computed values.
+* Better handle arguments to `system cd`.
+* Fix missing keepalives in `\e` prompt loop.
+* Always strip trailing newlines with `\e`.
+* Fix `\llm` without arguments, and remove debug output.
+
+
+Documentation
+---------
+* Startup tips: add right-arrow key binding.
+* Startup tips: add control-space and the `min_completion_trigger` setting.
+* Startup tips: add history-search bindings.
+* Prefer `https` protocol over `http` in documentation.
+
+
+Internal
+---------
+* Remove outdated email address in `pyproject.toml`.
+* Set well-known URL values in `pyproject.toml`.
+
+
+1.56.0 (2026/02/23)
+==============
+
+Features
+---------
+* Let the `--dsn` argument accept literal DSNs as well as aliases.
+* Accept `--character-set` as an alias for `--charset` at the CLI.
+* Add SSL/TLS version to `status` output.
+* Accept `socket` as a DSN query parameter.
+* Accept new-style `ssl_mode` in DSN URI query parameters, to match CLI argument.
+* Fully deprecate the built-in SSH functionality.
+* Let `--keepalive-ticks` be set per-connection, as a CLI option or DSN parameter.
+* Accept `character_set` as a DSN query parameter.
+* Don't attempt SSL for local socket connections when in "auto" SSL mode.
+* Add prompt format string for SSL/TLS version of the connection.
+* Add prompt format strings for displaying uptime.
+* Add batch mode to startup tips.
+* Update startup tips with new options.
+
+
+Bug Fixes
+---------
+* Make `--ssl-capath` argument a directory.
+* Allow users to use empty passwords without prompting or any configuration (#1584).
+* Check the existence of a socket more directly in `status`.
+* Allow multi-line SQL statements in batch mode on the standard input.
+* Fix extraneous prompt refresh on every keystroke.
+
+
 1.55.0 (2026/02/20)
 ==============
 
@@ -1584,7 +1812,7 @@ Features
   ```
 
 * Add `--defaults-group-suffix` to the command line. This lets the user specify
-  a group to use in the my.cnf files. (Thanks: [Irina Truong](http://github.com/j-bennet))
+  a group to use in the my.cnf files. (Thanks: [Irina Truong](https://github.com/j-bennet))
 
   In the my.cnf file a user can specify credentials for different databases and
   invoke mycli with the group name to use the appropriate credentials.
@@ -1649,7 +1877,7 @@ Features
 
 * Fuzzy completion is now case-insensitive. (Thanks: [bjarnagin](https://github.com/bjarnagin))
 * Added new-line (`\n`) to the list of special characters to use in prompt. (Thanks: [brewneaux](https://github.com/brewneaux))
-* Honor the `pager` setting in my.cnf files. (Thanks: [Irina Truong](http://github.com/j-bennet))
+* Honor the `pager` setting in my.cnf files. (Thanks: [Irina Truong](https://github.com/j-bennet))
 
 Bug Fixes
 ----------
@@ -1719,7 +1947,7 @@ Bug Fixes
 [Amjith Ramanujam]: https://blog.amjith.com
 [Artem Bezsmertnyi]: https://github.com/mrdeathless
 [BuonOmo]: https://github.com/BuonOmo
-[Daniel West]: http://github.com/danieljwest
+[Daniel West]: https://github.com/danieljwest
 [Dick Marinus]: https://github.com/meeuw
 [François Pietka]: https://github.com/fpietka
 [Frederic Aoustin]: https://github.com/fraoustin

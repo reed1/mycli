@@ -1,7 +1,9 @@
 # type: ignore
 
 from collections import namedtuple
+from contextlib import redirect_stdout
 import csv
+import io
 import os
 import shutil
 from tempfile import NamedTemporaryFile
@@ -11,12 +13,20 @@ import click
 from click.testing import CliRunner
 from pymysql.err import OperationalError
 
-from mycli.main import MyCli, cli, thanks_picker
+from mycli.constants import (
+    DEFAULT_DATABASE,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    DEFAULT_USER,
+    TEST_DATABASE,
+)
+from mycli.main import EMPTY_PASSWORD_FLAG_SENTINEL, MyCli, cli, thanks_picker
 from mycli.packages.parseutils import is_valid_connection_scheme
 import mycli.packages.special
 from mycli.packages.special.main import COMMANDS as SPECIAL_COMMANDS
+from mycli.packages.sqlresult import SQLResult
 from mycli.sqlexecute import ServerInfo, SQLExecute
-from test.utils import DATABASE, HOST, PASSWORD, PORT, USER, dbtest, run
+from test.utils import DATABASE, HOST, PASSWORD, PORT, TEMPFILE_PREFIX, USER, dbtest, run
 
 test_dir = os.path.abspath(os.path.dirname(__file__))
 project_dir = os.path.dirname(test_dir)
@@ -37,12 +47,12 @@ CLI_ARGS = [
     default_config_file,
     "--defaults-file",
     default_config_file,
-    "mycli_test_db",
+    TEST_DATABASE,
 ]
 
 
 @dbtest
-def test_binary_display_hex(executor, capsys):
+def test_binary_display_hex(executor):
     m = MyCli()
     m.sqlexecute = SQLExecute(
         None,
@@ -63,25 +73,25 @@ def test_binary_display_hex(executor, capsys):
     )
     m.explicit_pager = False
     sqlresult = next(m.sqlexecute.run("select b'01101010' AS binary_test"))
-    formatted = m.format_output(
-        sqlresult.title,
-        sqlresult.results,
-        sqlresult.headers,
-        False,
-        False,
-        "<nope>",
-        "right",
-        "hex",
-        None,
+    formatted = m.format_sqlresult(
+        sqlresult,
+        is_expanded=False,
+        is_redirected=False,
+        null_string="<null>",
+        numeric_alignment="right",
+        binary_display="hex",
+        max_width=None,
     )
-    m.output(formatted, sqlresult.status)
+    f = io.StringIO()
+    with redirect_stdout(f):
+        m.output(formatted, sqlresult)
     expected = " 0x6a "
-    stdout = capsys.readouterr().out
-    assert expected in stdout
+    output = f.getvalue()
+    assert expected in output
 
 
 @dbtest
-def test_binary_display_utf8(executor, capsys):
+def test_binary_display_utf8(executor):
     m = MyCli()
     m.sqlexecute = SQLExecute(
         None,
@@ -102,21 +112,21 @@ def test_binary_display_utf8(executor, capsys):
     )
     m.explicit_pager = False
     sqlresult = next(m.sqlexecute.run("select b'01101010' AS binary_test"))
-    formatted = m.format_output(
-        sqlresult.title,
-        sqlresult.results,
-        sqlresult.headers,
-        False,
-        False,
-        "<nope>",
-        "right",
-        "utf8",
-        None,
+    formatted = m.format_sqlresult(
+        sqlresult,
+        is_expanded=False,
+        is_redirected=False,
+        null_string="<null>",
+        numeric_alignment="right",
+        binary_display="utf8",
+        max_width=None,
     )
-    m.output(formatted, sqlresult.status)
+    f = io.StringIO()
+    with redirect_stdout(f):
+        m.output(formatted, sqlresult)
     expected = " j "
-    stdout = capsys.readouterr().out
-    assert expected in stdout
+    output = f.getvalue()
+    assert expected in output
 
 
 @dbtest
@@ -134,12 +144,12 @@ def test_select_from_empty_table(executor):
 
 
 def test_is_valid_connection_scheme_valid(executor, capsys):
-    is_valid, scheme = is_valid_connection_scheme("mysql://test@localhost:3306/dev")
+    is_valid, scheme = is_valid_connection_scheme(f"mysql://test@{DEFAULT_HOST}:{DEFAULT_PORT}/dev")
     assert is_valid
 
 
 def test_is_valid_connection_scheme_invalid(executor, capsys):
-    is_valid, scheme = is_valid_connection_scheme("nope://test@localhost:3306/dev")
+    is_valid, scheme = is_valid_connection_scheme(f"nope://test@{DEFAULT_HOST}:{DEFAULT_PORT}/dev")
     assert not is_valid
 
 
@@ -228,7 +238,7 @@ def test_reconnect_database_is_selected(executor, capsys):
         raise e
     m.reconnect()
     try:
-        next(m.sqlexecute.run("show tables")).results.fetchall()
+        next(m.sqlexecute.run("show tables")).rows.fetchall()
     except Exception as e:
         raise e
 
@@ -282,8 +292,8 @@ def test_reconnect_with_different_database(executor):
         None,
         None,
     )
-    database_1 = "mycli_test_db"
-    database_2 = "mysql"
+    database_1 = TEST_DATABASE
+    database_2 = DEFAULT_DATABASE
     sql_1 = f"use {database_1}"
     sql_2 = f"\\r {database_2}"
     _result_1 = next(mycli.packages.special.execute(executor, sql_1))
@@ -313,7 +323,7 @@ def test_reconnect_with_same_database(executor):
         None,
         None,
     )
-    database = "mysql"
+    database = DEFAULT_DATABASE
     sql = f"\\u {database}"
     result = next(mycli.packages.special.execute(executor, sql))
     sql = f"\\r {database}"
@@ -330,11 +340,11 @@ def test_prompt_no_host_only_socket(executor):
     mycli.sqlexecute.server_info = ServerInfo.from_version_string("8.0.44-0ubuntu0.24.04.1")
     mycli.sqlexecute.host = None
     mycli.sqlexecute.socket = "/var/run/mysqld/mysqld.sock"
-    mycli.sqlexecute.user = "root"
-    mycli.sqlexecute.dbname = "mysql"
-    mycli.sqlexecute.port = "3306"
-    prompt = mycli.get_prompt(mycli.prompt_format)
-    assert prompt == "MySQL root@localhost:mysql> "
+    mycli.sqlexecute.user = DEFAULT_USER
+    mycli.sqlexecute.dbname = DEFAULT_DATABASE
+    mycli.sqlexecute.port = DEFAULT_PORT
+    prompt = mycli.get_prompt(mycli.prompt_format, 0)
+    assert prompt == f"MySQL {DEFAULT_USER}@{DEFAULT_HOST}:{DEFAULT_DATABASE}> "
 
 
 @dbtest
@@ -345,11 +355,26 @@ def test_prompt_socket_overrides_port(executor):
     mycli.sqlexecute.server_info = ServerInfo.from_version_string("8.0.44-0ubuntu0.24.04.1")
     mycli.sqlexecute.host = None
     mycli.sqlexecute.socket = "/var/run/mysqld/mysqld.sock"
-    mycli.sqlexecute.user = "root"
-    mycli.sqlexecute.dbname = "mysql"
-    mycli.sqlexecute.port = "3306"
-    prompt = mycli.get_prompt(mycli.prompt_format)
-    assert prompt == "MySQL root@localhost:mysqld.sock mysql> "
+    mycli.sqlexecute.user = DEFAULT_USER
+    mycli.sqlexecute.dbname = DEFAULT_DATABASE
+    mycli.sqlexecute.port = DEFAULT_PORT
+    prompt = mycli.get_prompt(mycli.prompt_format, 0)
+    assert prompt == f"MySQL {DEFAULT_USER}@{DEFAULT_HOST}:mysqld.sock {DEFAULT_DATABASE}> "
+
+
+@dbtest
+def test_prompt_socket_short_host(executor):
+    mycli = MyCli()
+    mycli.prompt_format = "\\t \\u@\\H:\\k \\d> "
+    mycli.sqlexecute = SQLExecute
+    mycli.sqlexecute.server_info = ServerInfo.from_version_string("8.0.44-0ubuntu0.24.04.1")
+    mycli.sqlexecute.host = f'{DEFAULT_HOST}.localdomain'
+    mycli.sqlexecute.socket = None
+    mycli.sqlexecute.user = DEFAULT_USER
+    mycli.sqlexecute.dbname = DEFAULT_DATABASE
+    mycli.sqlexecute.port = DEFAULT_PORT
+    prompt = mycli.get_prompt(mycli.prompt_format, 0)
+    assert prompt == f"MySQL {DEFAULT_USER}@{DEFAULT_HOST}:{DEFAULT_PORT} {DEFAULT_DATABASE}> "
 
 
 @dbtest
@@ -373,11 +398,11 @@ def test_disable_show_warnings(executor):
 @dbtest
 def test_output_ddl_with_warning_and_show_warnings_enabled(executor):
     runner = CliRunner()
-    db = "mycli_test_db"
+    db = TEST_DATABASE
     table = "table_that_definitely_does_not_exist_1234"
     sql = f"DROP TABLE IF EXISTS {db}.{table}"
     result = runner.invoke(cli, args=CLI_ARGS + ["--show-warnings", "--no-warn"], input=sql)
-    expected = "Level\tCode\tMessage\nNote\t1051\tUnknown table 'mycli_test_db.table_that_definitely_does_not_exist_1234'\n"
+    expected = f"Level\tCode\tMessage\nNote\t1051\tUnknown table '{db}.table_that_definitely_does_not_exist_1234'\n"
     assert expected in result.output
 
 
@@ -462,7 +487,7 @@ def test_execute_arg_with_checkpoint(executor):
     sql = "select * from test;"
     runner = CliRunner()
 
-    with NamedTemporaryFile(mode="w", delete=False) as checkpoint:
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode="w", delete=False) as checkpoint:
         checkpoint.close()
 
     result = runner.invoke(cli, args=CLI_ARGS + ["--execute", sql, f"--checkpoint={checkpoint.name}"])
@@ -524,6 +549,20 @@ def test_batch_mode(executor):
     run(executor, """insert into test values('abc'), ('def'), ('ghi')""")
 
     sql = "select count(*) from test;\nselect * from test limit 1;"
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args=CLI_ARGS, input=sql)
+
+    assert result.exit_code == 0
+    assert "count(*)\n3\na\nabc\n" in "".join(result.output)
+
+
+@dbtest
+def test_batch_mode_multiline_statement(executor):
+    run(executor, """create table test(a text)""")
+    run(executor, """insert into test values('abc'), ('def'), ('ghi')""")
+
+    sql = "select count(*)\nfrom test;\nselect * from test limit 1;"
 
     runner = CliRunner()
     result = runner.invoke(cli, args=CLI_ARGS, input=sql)
@@ -618,6 +657,7 @@ def output(monkeypatch, terminal_size, testdata, explicit_pager, expect_pager):
 
     class PromptBuffer:
         output = TestOutput()
+        app = None
 
     m.prompt_app = PromptBuffer()
     m.sqlexecute = TestExecute()
@@ -635,7 +675,7 @@ def output(monkeypatch, terminal_size, testdata, explicit_pager, expect_pager):
 
     monkeypatch.setattr(click, "echo_via_pager", echo_via_pager)
     monkeypatch.setattr(click, "secho", secho)
-    m.output(testdata)
+    m.output(testdata, SQLResult())
     if clickoutput.endswith("\n"):
         clickoutput = clickoutput[:-1]
     assert clickoutput == "\n".join(testdata)
@@ -671,10 +711,10 @@ def test_reserved_space_is_integer(monkeypatch):
 
 def test_list_dsn(monkeypatch):
     monkeypatch.setattr(MyCli, "system_config_files", [])
-    monkeypatch.setattr(MyCli, "pwd_config_file", os.path.join(test_dir, "does_not_exist.myclirc"))
+    monkeypatch.setattr(MyCli, "pwd_config_file", os.devnull)
     runner = CliRunner()
     # keep Windows from locking the file with delete=False
-    with NamedTemporaryFile(mode="w", delete=False) as myclirc:
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode="w", delete=False) as myclirc:
         myclirc.write(
             dedent("""\
             [alias_dsn]
@@ -713,7 +753,7 @@ def test_unprettify_statement():
 def test_list_ssh_config():
     runner = CliRunner()
     # keep Windows from locking the file with delete=False
-    with NamedTemporaryFile(mode="w", delete=False) as ssh_config:
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode="w", delete=False) as ssh_config:
         ssh_config.write(
             dedent("""\
             Host test
@@ -754,6 +794,9 @@ def test_dsn(monkeypatch):
         config = {
             "main": {},
             "alias_dsn": {},
+            "connection": {
+                "default_keepalive_ticks": 0,
+            },
         }
 
         def __init__(self, **args):
@@ -763,6 +806,7 @@ def test_dsn(monkeypatch):
             self.redirect_formatter = Formatter()
             self.ssl_mode = "auto"
             self.my_cnf = {"client": {}, "mysqld": {}}
+            self.default_keepalive_ticks = 0
 
         def connect(self, **args):
             MockMyCli.connect_args = args
@@ -820,6 +864,9 @@ def test_dsn(monkeypatch):
     MockMyCli.config = {
         "main": {},
         "alias_dsn": {"test": "mysql://alias_dsn_user:alias_dsn_passwd@alias_dsn_host:4/alias_dsn_database"},
+        "connection": {
+            "default_keepalive_ticks": 0,
+        },
     }
     MockMyCli.connect_args = None
 
@@ -838,6 +885,9 @@ def test_dsn(monkeypatch):
     MockMyCli.config = {
         "main": {},
         "alias_dsn": {"test": "mysql://alias_dsn_user:alias_dsn_passwd@alias_dsn_host:4/alias_dsn_database"},
+        "connection": {
+            "default_keepalive_ticks": 0,
+        },
     }
     MockMyCli.connect_args = None
 
@@ -882,7 +932,7 @@ def test_dsn(monkeypatch):
     )
 
     # Use a DSN with query parameters
-    result = runner.invoke(mycli.main.cli, args=["mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database?ssl=True"])
+    result = runner.invoke(mycli.main.cli, args=["mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database?ssl_mode=off"])
     assert result.exit_code == 0, result.output + " " + str(result.exception)
     assert (
         MockMyCli.connect_args["user"] == "dsn_user"
@@ -890,27 +940,161 @@ def test_dsn(monkeypatch):
         and MockMyCli.connect_args["host"] == "dsn_host"
         and MockMyCli.connect_args["port"] == 6
         and MockMyCli.connect_args["database"] == "dsn_database"
-        and MockMyCli.connect_args["ssl"]["enable"] is True
+        and MockMyCli.connect_args["ssl"] is None
     )
 
-    # When a user uses a DSN with query parameters, and used command line
+    # When a user uses a DSN with query parameters, and also used command line
+    # arguments, prefer the command line arguments.
+    MockMyCli.connect_args = None
+    MockMyCli.config = {
+        "main": {},
+        "alias_dsn": {},
+        "connection": {
+            "default_keepalive_ticks": 0,
+        },
+    }
+
+    # keepalive_ticks as a query parameter
+    result = runner.invoke(mycli.main.cli, args=["mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database?keepalive_ticks=30"])
+    assert result.exit_code == 0, result.output + " " + str(result.exception)
+    assert MockMyCli.connect_args["keepalive_ticks"] == 30
+
+    MockMyCli.connect_args = None
+
+    # When a user uses a DSN with query parameters, and also used command line
     # arguments, use the command line arguments.
     result = runner.invoke(
         mycli.main.cli,
         args=[
-            "mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database?ssl=False",
-            "--ssl",
+            'mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database?ssl_mode=off',
+            '--ssl-mode=on',
         ],
     )
-    assert result.exit_code == 0, result.output + " " + str(result.exception)
-    assert (
-        MockMyCli.connect_args["user"] == "dsn_user"
-        and MockMyCli.connect_args["passwd"] == "dsn_passwd"
-        and MockMyCli.connect_args["host"] == "dsn_host"
-        and MockMyCli.connect_args["port"] == 6
-        and MockMyCli.connect_args["database"] == "dsn_database"
-        and MockMyCli.connect_args["ssl"]["enable"] is True
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert MockMyCli.connect_args['user'] == 'dsn_user'
+    assert MockMyCli.connect_args['passwd'] == 'dsn_passwd'
+    assert MockMyCli.connect_args['host'] == 'dsn_host'
+    assert MockMyCli.connect_args['port'] == 6
+    assert MockMyCli.connect_args['database'] == 'dsn_database'
+    assert MockMyCli.connect_args['ssl']['mode'] == 'on'
+
+    # Accept a literal DSN with the --dsn flag (not only an alias)
+    result = runner.invoke(
+        mycli.main.cli,
+        args=[
+            '--dsn',
+            'mysql://dsn_user:dsn_passwd@dsn_host:6/dsn_database',
+        ],
     )
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert (
+        MockMyCli.connect_args['user'] == 'dsn_user'
+        and MockMyCli.connect_args['passwd'] == 'dsn_passwd'
+        and MockMyCli.connect_args['host'] == 'dsn_host'
+        and MockMyCli.connect_args['port'] == 6
+        and MockMyCli.connect_args['database'] == 'dsn_database'
+    )
+
+    # accept socket as a query parameter
+    result = runner.invoke(
+        mycli.main.cli,
+        args=[
+            f'mysql://dsn_user:dsn_passwd@{DEFAULT_HOST}/dsn_database?socket=mysql.sock',
+        ],
+    )
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert MockMyCli.connect_args['user'] == 'dsn_user'
+    assert MockMyCli.connect_args['passwd'] == 'dsn_passwd'
+    assert MockMyCli.connect_args['host'] == DEFAULT_HOST
+    assert MockMyCli.connect_args['database'] == 'dsn_database'
+    assert MockMyCli.connect_args['socket'] == 'mysql.sock'
+
+    # accept character_set as a query parameter
+    result = runner.invoke(
+        mycli.main.cli,
+        args=[
+            f'mysql://dsn_user:dsn_passwd@{DEFAULT_HOST}/dsn_database?character_set=latin1',
+        ],
+    )
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert MockMyCli.connect_args['user'] == 'dsn_user'
+    assert MockMyCli.connect_args['passwd'] == 'dsn_passwd'
+    assert MockMyCli.connect_args['host'] == DEFAULT_HOST
+    assert MockMyCli.connect_args['database'] == 'dsn_database'
+    assert MockMyCli.connect_args['character_set'] == 'latin1'
+
+    # --character_set overrides character_set as a query parameter
+    result = runner.invoke(
+        mycli.main.cli,
+        args=[
+            f'mysql://dsn_user:dsn_passwd@{DEFAULT_HOST}/dsn_database?character_set=latin1',
+            '--character-set=utf8mb3',
+        ],
+    )
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert MockMyCli.connect_args['user'] == 'dsn_user'
+    assert MockMyCli.connect_args['passwd'] == 'dsn_passwd'
+    assert MockMyCli.connect_args['host'] == DEFAULT_HOST
+    assert MockMyCli.connect_args['database'] == 'dsn_database'
+    assert MockMyCli.connect_args['character_set'] == 'utf8mb3'
+
+
+def test_password_flag_uses_sentinel(monkeypatch):
+    class Formatter:
+        format_name = None
+
+    class Logger:
+        def debug(self, *args, **args_dict):
+            pass
+
+        def warning(self, *args, **args_dict):
+            pass
+
+    class MockMyCli:
+        config = {
+            'main': {},
+            'alias_dsn': {},
+            'connection': {
+                'default_keepalive_ticks': 0,
+            },
+        }
+
+        def __init__(self, **_args):
+            self.logger = Logger()
+            self.destructive_warning = False
+            self.main_formatter = Formatter()
+            self.redirect_formatter = Formatter()
+            self.ssl_mode = 'auto'
+            self.my_cnf = {'client': {}, 'mysqld': {}}
+            self.default_keepalive_ticks = 0
+
+        def connect(self, **args):
+            MockMyCli.connect_args = args
+
+        def run_query(self, query, new_line=True):
+            pass
+
+    import mycli.main
+
+    monkeypatch.setattr(mycli.main, 'MyCli', MockMyCli)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        mycli.main.cli,
+        args=[
+            '--user',
+            'user',
+            '--host',
+            DEFAULT_HOST,
+            '--port',
+            f'{DEFAULT_PORT}',
+            '--database',
+            'database',
+            '--password',
+        ],
+    )
+    assert result.exit_code == 0, result.output + ' ' + str(result.exception)
+    assert MockMyCli.connect_args['passwd'] == EMPTY_PASSWORD_FLAG_SENTINEL
 
 
 def test_ssh_config(monkeypatch):
@@ -929,6 +1113,9 @@ def test_ssh_config(monkeypatch):
         config = {
             "main": {},
             "alias_dsn": {},
+            "connection": {
+                "default_keepalive_ticks": 0,
+            },
         }
 
         def __init__(self, **args):
@@ -938,6 +1125,7 @@ def test_ssh_config(monkeypatch):
             self.redirect_formatter = Formatter()
             self.ssl_mode = "auto"
             self.my_cnf = {"client": {}, "mysqld": {}}
+            self.default_keepalive_ticks = 0
 
         def connect(self, **args):
             MockMyCli.connect_args = args
@@ -952,7 +1140,7 @@ def test_ssh_config(monkeypatch):
 
     # Setup temporary configuration
     # keep Windows from locking the file with delete=False
-    with NamedTemporaryFile(mode="w", delete=False) as ssh_config:
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode="w", delete=False) as ssh_config:
         ssh_config.write(
             dedent("""\
             Host test
@@ -1055,7 +1243,7 @@ def test_execute_with_logfile(executor):
     sql = 'select 1'
     runner = CliRunner()
 
-    with NamedTemporaryFile(mode="w", delete=False) as logfile:
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode="w", delete=False) as logfile:
         result = runner.invoke(mycli.main.cli, args=CLI_ARGS + ["--logfile", logfile.name, "--execute", sql])
         assert result.exit_code == 0
 
@@ -1066,3 +1254,29 @@ def test_execute_with_logfile(executor):
             os.remove(logfile.name)
     except Exception as e:
         print(f"An error occurred while attempting to delete the file: {e}")
+
+
+def test_null_string_config(monkeypatch):
+    monkeypatch.setattr(MyCli, 'system_config_files', [])
+    monkeypatch.setattr(MyCli, 'pwd_config_file', os.devnull)
+    runner = CliRunner()
+    # keep Windows from locking the file with delete=False
+    with NamedTemporaryFile(mode='w', delete=False) as myclirc:
+        myclirc.write(
+            dedent("""\
+            [main]
+            null_string = <nope>
+            """)
+        )
+        myclirc.flush()
+        args = CLI_ARGS + ['--myclirc', myclirc.name, '--format=table', '--execute', 'SELECT NULL']
+        result = runner.invoke(mycli.main.cli, args=args)
+        assert '<nope>' in result.output
+        assert '<null>' not in result.output
+
+    # delete=False means we should try to clean up
+    try:
+        if os.path.exists(myclirc.name):
+            os.remove(myclirc.name)
+    except Exception as e:
+        print(f'An error occurred while attempting to delete the file: {e}')

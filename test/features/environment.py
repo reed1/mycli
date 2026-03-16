@@ -3,13 +3,15 @@
 import os
 import shutil
 import sys
-from tempfile import mkstemp
+from tempfile import NamedTemporaryFile
 
 import db_utils as dbutils
 import fixture_utils as fixutils
 import pexpect
 
+from mycli.constants import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_USER
 from steps.wrappers import run_cli, wait_prompt
+from test.utils import TEMPFILE_PREFIX
 
 test_log_file = os.path.join(os.environ["HOME"], ".mycli.test.log")
 
@@ -31,6 +33,7 @@ def before_all(context):
     """Set env parameters."""
     os.environ["LINES"] = "100"
     os.environ["COLUMNS"] = "100"
+    os.environ["VISUAL"] = "ex"
     os.environ["EDITOR"] = "ex"
     os.environ["LC_ALL"] = "en_US.UTF-8"
     os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
@@ -52,9 +55,9 @@ def before_all(context):
 
     # Store get params from config/environment variables
     context.conf = {
-        "host": context.config.userdata.get("my_test_host", os.getenv("PYTEST_HOST", "localhost")),
-        "port": context.config.userdata.get("my_test_port", int(os.getenv("PYTEST_PORT", "3306"))),
-        "user": context.config.userdata.get("my_test_user", os.getenv("PYTEST_USER", "root")),
+        "host": context.config.userdata.get("my_test_host", os.getenv("PYTEST_HOST", DEFAULT_HOST)),
+        "port": context.config.userdata.get("my_test_port", int(os.getenv("PYTEST_PORT", DEFAULT_PORT))),
+        "user": context.config.userdata.get("my_test_user", os.getenv("PYTEST_USER", DEFAULT_USER)),
         "pass": context.config.userdata.get("my_test_pass", os.getenv("PYTEST_PASSWORD", None)),
         "cli_command": context.config.userdata.get("my_cli_command", None)
         or sys.executable + ' -c "import coverage ; coverage.process_startup(); import mycli.main; mycli.main.cli()"',
@@ -64,13 +67,12 @@ def before_all(context):
         "pager_boundary": "---boundary---",
     }
 
-    _, my_cnf = mkstemp()
-    with open(my_cnf, "w") as f:
-        f.write(
+    with NamedTemporaryFile(prefix=TEMPFILE_PREFIX, mode='w', delete=False) as my_cnf:
+        my_cnf.write(
             f'[client]\npager={sys.executable} '
             f'{os.path.join(context.package_root, "test/features/wrappager.py")} {context.conf["pager_boundary"]}\n'
         )
-    context.conf["defaults-file"] = my_cnf
+    context.conf["defaults-file"] = my_cnf.name
     context.conf["myclirc"] = os.path.join(context.package_root, "test", "myclirc")
 
     context.cn = dbutils.create_db(
@@ -84,6 +86,11 @@ def after_all(context):
     """Unset env parameters."""
     dbutils.close_cn(context.cn)
     dbutils.drop_db(context.conf["host"], context.conf["port"], context.conf["user"], context.conf["pass"], context.conf["dbname"])
+    try:
+        if os.path.exists(context.conf["defaults-file"]):
+            os.remove(context.conf["defaults-file"])
+    except Exception:
+        pass
 
     # Restore env vars.
     # for k, v in context.pgenv.items():
