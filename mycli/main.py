@@ -1360,10 +1360,6 @@ class MyCli:
             else:
                 editing_mode = EditingMode.EMACS
 
-            # Small delay when using SSH tunnel to let background threads settle
-            # Prevents terminal corruption when prompt_toolkit probes terminal capabilities
-            if self.sqlexecute.ssh_host:
-                sleep(0.5)
 
             self.prompt_app = PromptSession(
                 color_depth=ColorDepth.DEPTH_24_BIT if 'truecolor' in os.getenv('COLORTERM', '').lower() else None,
