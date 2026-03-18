@@ -21,7 +21,7 @@ def add_custom_key_bindings(kb, mycli):
         _logger.debug("Detected <C-b> key.")
         query = "SELECT schema_name FROM information_schema.schemata"
         [result] = mycli.sqlexecute.run(query)
-        schemas = [row[0] for row in result.results.fetchall()]
+        schemas = [row[0] for row in result.rows.fetchall()]
         filtereds = sorted([e for e in schemas if e != "information_schema"])
         sorteds = custom_sort_schemas(filtereds)
         schema = subprocess.run(
