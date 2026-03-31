@@ -4,6 +4,7 @@ import re
 import subprocess
 
 from .main import special_command, ArgType
+from mycli.packages.sqlresult import SQLResult
 
 log = logging.getLogger(__name__)
 
@@ -618,6 +619,70 @@ def directed_format(cur, arg=None, **kwargs):
         return [(None, None, None, f"Unknown recipe '{recipe}'. Use A or C.")]
 
 
+@special_command(
+    "\\trc",
+    "\\trc",
+    "Show tables with row counts (estimated + max id)",
+    arg_type=ArgType.PARSED_QUERY,
+    case_sensitive=True,
+)
+def table_row_count(cur, arg=None, **_):
+    # Step 1: Get tables and check for numeric id column
+    cur.execute("""
+    SELECT t.table_name,
+           MAX(CASE WHEN c.column_name = 'id'
+               AND c.data_type IN ('int', 'bigint', 'smallint', 'mediumint', 'tinyint') THEN 1 ELSE 0 END) as has_id
+    FROM information_schema.tables t
+    LEFT JOIN information_schema.columns c
+        ON t.table_name = c.table_name
+        AND t.table_schema = c.table_schema
+        AND c.column_name = 'id'
+    WHERE t.table_schema = database()
+        AND t.table_type = 'BASE TABLE'
+    GROUP BY t.table_name
+    ORDER BY t.table_name
+    """)
+    tables = list(cur.fetchall())
+
+    if not tables:
+        return [SQLResult()]
+
+    # Step 2: Build UNION ALL for max(id)
+    tables_with_id = [t[0] for t in tables if t[1] == 1]
+
+    max_id_map = {}
+    if tables_with_id:
+        union_parts = [
+            f"SELECT '{t}' as table_name, MAX(id) as max_id FROM `{t}`"
+            for t in tables_with_id
+        ]
+        max_id_query = " UNION ALL ".join(union_parts)
+        cur.execute(max_id_query)
+        for row in cur.fetchall():
+            max_id_map[row[0]] = row[1]
+
+    # Step 3: Get estimated row counts from information_schema
+    cur.execute("""
+    SELECT table_name, table_rows
+    FROM information_schema.tables
+    WHERE table_schema = database()
+        AND table_type = 'BASE TABLE'
+    """)
+    stat_map = {}
+    for row in cur.fetchall():
+        stat_map[row[0]] = row[1]
+
+    # Step 4: Combine results
+    combined_rows = []
+    for table_name, has_id in tables:
+        est_count = stat_map.get(table_name, 0)
+        max_id = max_id_map.get(table_name)
+        combined_rows.append((table_name, est_count, max_id))
+
+    headers = ["table_name", "est_count", "max_id"]
+    return [SQLResult(header=headers, rows=combined_rows, status=f"SELECT {len(combined_rows)}")]
+
+
 def is_reed_command(cmd):
     """Check if a command is one of Reed's special commands."""
     return cmd in (
@@ -637,6 +702,7 @@ def is_reed_command(cmd):
         "\\ss",
         "\\sct",
         "\\df",
+        "\\trc",
     )
 
 
