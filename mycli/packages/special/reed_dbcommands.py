@@ -80,9 +80,9 @@ def describe(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -110,9 +110,9 @@ def drill_one(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -141,9 +141,9 @@ def drill_up(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -172,9 +172,9 @@ def drill_down(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -208,9 +208,9 @@ def drill_down_recursive(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -257,9 +257,9 @@ def drill_down_kode(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -308,9 +308,9 @@ def tree(cur, arg=None, **_):
         rows = list(cur.fetchall())
         formatted_rows = _build_and_format_tree(rows)
         headers = ["depth", "level", "cnt"]
-        return [(None, formatted_rows, headers, "")]
+        return [SQLResult(rows=formatted_rows, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 def _build_and_format_tree(rows):
@@ -389,9 +389,9 @@ def info_tables(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -414,9 +414,9 @@ def info_columns(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -445,9 +445,9 @@ def get_columns(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -469,9 +469,9 @@ def get_distinct_count(cur, arg=None, **_):
     cur.execute(query)
     if cur.description:
         headers = [x[0] for x in cur.description]
-        return [(None, cur, headers, "")]
+        return [SQLResult(rows=cur, header=headers)]
     else:
-        return [(None, None, None, "")]
+        return [SQLResult()]
 
 
 @special_command(
@@ -503,7 +503,7 @@ ignore 1 lines"""
     rows_affected = cur.rowcount
     status_message = f"Query OK, {rows_affected} rows affected"
 
-    return [(None, None, None, status_message)]
+    return [SQLResult(status=status_message)]
 
 
 @special_command(
@@ -520,7 +520,7 @@ def truncate_table(cur, arg=None, **_):
         log.debug(query)
         cur.execute(query)
     status_message = f"Truncated {len(tables)} table(s) successfully"
-    return [(None, None, None, status_message)]
+    return [SQLResult(status=status_message)]
 
 
 @special_command(
@@ -540,9 +540,9 @@ def select_schema(cur, arg=None, **_):
         query = f"use {schema}"
         log.debug(query)
         cur.execute(query)
-        return [(None, None, None, None)]
+        return [SQLResult()]
     else:
-        return [(None, None, None, None)]
+        return [SQLResult()]
 
 
 @special_command(
@@ -574,7 +574,7 @@ def show_create_table(cur, arg=None, **_):
         stderr=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
     )
-    return [(None, None, None, None)]
+    return [SQLResult()]
 
 
 def get_filtered_columns(cur, table):
@@ -609,14 +609,14 @@ def directed_format(cur, arg=None, **kwargs):
         os.environ["PAGER"] = "visidata-db"
         set_pager_enabled(True)
         list(execute(cur, "\\T csv"))
-        return [(None, None, None, "Directed format A: pager=visidata-db, format=csv")]
+        return [SQLResult(status="Directed format A: pager=visidata-db, format=csv")]
     elif recipe == "C":
         # Recipe C: no pager with ASCII format
         set_pager_enabled(False)
         list(execute(cur, "\\T ascii"))
-        return [(None, None, None, "Directed format C: pager=disabled, format=ascii")]
+        return [SQLResult(status="Directed format C: pager=disabled, format=ascii")]
     else:
-        return [(None, None, None, f"Unknown recipe '{recipe}'. Use A or C.")]
+        return [SQLResult(status=f"Unknown recipe '{recipe}'. Use A or C.")]
 
 
 @special_command(
