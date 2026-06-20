@@ -214,7 +214,6 @@ class MyCli:
         self.defaults_suffix = defaults_suffix
         self.login_path = login_path
         self.toolbar_error_message: str | None = None
-        self._pending_command_from_pager: str | None = None
         self.prompt_app: PromptSession | None = None
         self._keepalive_counter = 0
         self.keepalive_ticks: int | None = 0
@@ -1152,20 +1151,15 @@ class MyCli:
         def one_iteration(text: str | None = None) -> None:
             inputhook = keepalive_hook if self.keepalive_ticks and self.keepalive_ticks >= 1 else None
             if text is None:
-                # Check for pending command from pager
-                if self._pending_command_from_pager:
-                    text = self._pending_command_from_pager
-                    self._pending_command_from_pager = None
-                else:
-                    try:
-                        assert self.prompt_app is not None
-                        loaded_message_fn = functools.partial(get_prompt_message, self.prompt_app.app)
-                        text = self.prompt_app.prompt(
-                            inputhook=inputhook,
-                            message=loaded_message_fn,
-                        )
-                    except KeyboardInterrupt:
-                        return
+                try:
+                    assert self.prompt_app is not None
+                    loaded_message_fn = functools.partial(get_prompt_message, self.prompt_app.app)
+                    text = self.prompt_app.prompt(
+                        inputhook=inputhook,
+                        message=loaded_message_fn,
+                    )
+                except KeyboardInterrupt:
+                    return
 
                 special.set_expanded_output(False)
                 special.set_forced_horizontal_output(False)
@@ -1272,6 +1266,9 @@ class MyCli:
                 self.main_formatter.query = text
                 self.redirect_formatter.query = text
                 successful = True
+                # Record drill context before output, since the pager blocks here.
+                from mycli.packages.special.reed_dbcommands import set_active_table_from_sql
+                set_active_table_from_sql(text)
                 output_res(res, start)
                 special.unset_once_if_written(self.post_redirect_command)
                 special.flush_pipe_once_if_written(self.post_redirect_command)
@@ -1406,6 +1403,10 @@ class MyCli:
             special.close_tee()
             if not self.less_chatty:
                 self.echo("Goodbye!")
+        finally:
+            from mycli.packages.special.reed_dbcommands import shutdown_socket_server
+
+            shutdown_socket_server()
 
     def reconnect(self, database: str = "") -> bool:
         """
@@ -1564,14 +1565,11 @@ class MyCli:
                         for line in text:
                             yield line + "\n"
 
-                    click.echo_via_pager(newlinewrapper(buf))
+                    if "visidata-db" in os.environ.get("PAGER", ""):
+                        from mycli.packages.special.reed_dbcommands import ensure_socket_server
 
-                    # Call on_pager_close from reed_dbcommands module
-                    from mycli.packages.special.reed_dbcommands import on_pager_close
-                    pending_cmd = on_pager_close()
-                    if pending_cmd:
-                        # Schedule the command to be executed in the next iteration
-                        self._pending_command_from_pager = pending_cmd
+                        ensure_socket_server(self)
+                    click.echo_via_pager(newlinewrapper(buf))
                 else:
                     for line in buf:
                         click.secho(line)

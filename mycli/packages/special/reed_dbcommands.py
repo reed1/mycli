@@ -1,3 +1,6 @@
+import csv
+import io
+import json
 import logging
 import os
 import re
@@ -8,62 +11,124 @@ from mycli.packages.sqlresult import SQLResult
 
 log = logging.getLogger(__name__)
 
-RVISIDATA_DB_LAST_REPLY_FILE = "/tmp/rlocal/visidata/last-reply"
+DB_SOCKET_ENV = "DB_SOCKET"
 
 # Track the last tabular command context
 _last_tabular_command_table = None
+# Last schema seen on a qualified table; preserved across unqualified references
+# so "open table" can reuse it (select * from <schema>.<table> ...).
+_last_schema = None
+
+# One socket server per mycli process, started lazily when first needed.
+_socket_server = None
 
 
 def reed_tabular_command(func):
-    """Decorator to mark commands as reed tabular commands."""
+    """Track the table a tabular command was last invoked on, for drill context."""
 
-    # Wrap the function to track when it's called
     def wrapper(*args, **kwargs):
-        global _last_tabular_command_table
+        global _last_tabular_command_table, _last_schema
 
-        # Clean up the reply file
-        if os.path.exists(RVISIDATA_DB_LAST_REPLY_FILE):
-            os.remove(RVISIDATA_DB_LAST_REPLY_FILE)
-
-        # Extract table and id from arguments for tracking
-        if "arg" in kwargs and kwargs["arg"]:
-            arg_parts = re.split(r"\s+", kwargs["arg"])
-            if len(arg_parts) >= 1:
+        if kwargs.get("arg"):
+            arg_parts = re.split(r"\s+", kwargs["arg"].strip())
+            if arg_parts and arg_parts[0]:
                 _last_tabular_command_table = arg_parts[0]
+                if "." in arg_parts[0]:
+                    _last_schema = arg_parts[0].split(".", 1)[0]
 
         return func(*args, **kwargs)
 
     return wrapper
 
 
-def on_pager_close():
-    """Called after the pager closes. Returns pending command if there is one."""
-    global _last_tabular_command_table
+def set_active_table_from_sql(sql):
+    """Record the first table referenced by a plain SQL query as the drill context.
 
-    if not os.path.exists(RVISIDATA_DB_LAST_REPLY_FILE):
-        return None
+    Lets `select * from <table>` feed drill up/down just like the \\do family.
+    Reuses mycli's own table extractor; backslash commands yield no tables and
+    leave the context untouched.
+    """
+    global _last_tabular_command_table, _last_schema
 
-    with open(RVISIDATA_DB_LAST_REPLY_FILE, "r") as f:
-        last_reply = f.read().strip()
+    from mycli.packages.parseutils import extract_tables_from_complete_statements
 
-    if not last_reply or not _last_tabular_command_table:
-        return None
+    tables = extract_tables_from_complete_statements(sql)
+    if not tables:
+        return
+    schema, table, _alias = tables[0]
+    if schema:
+        _last_schema = schema
+    _last_tabular_command_table = f"{schema}.{table}" if schema else table
 
-    # Parse the reply format
-    if last_reply.startswith("drill_up."):
-        # Extract ID from drill_up.<id> format
-        parts = last_reply.split(".")
-        new_id = parts[1]
-        command_to_execute = f"\\du {_last_tabular_command_table} {new_id}"
-        return command_to_execute
-    elif last_reply.startswith("drill_down."):
-        # Extract ID from drill_down.<id> format
-        parts = last_reply.split(".")
-        new_id = parts[1]
-        command_to_execute = f"\\dd {_last_tabular_command_table} {new_id}"
-        return command_to_execute
 
-    return None
+def _results_to_csv(results):
+    out = io.StringIO()
+    writer = csv.writer(out)
+    for result in results:
+        if result.header:
+            writer.writerow(result.header)
+        if result.rows is not None:
+            for row in result.rows:
+                writer.writerow(["" if value is None else value for value in row])
+    return out.getvalue()
+
+
+def ensure_socket_server(mycli):
+    """Start the per-process socket server on first use and export its path.
+
+    VisiData runs as mycli's pager, so while it is open mycli's main thread is
+    blocked in echo_via_pager and never touches the connection — the server can
+    safely reuse the live connection to answer drill requests.
+    """
+    global _socket_server
+    if _socket_server is not None:
+        return _socket_server
+
+    from mycli.packages.socket_server import SocketServer
+
+    server = SocketServer(lambda request: _handle_request(mycli, request))
+    server.start()
+    os.environ[DB_SOCKET_ENV] = server.path
+    _socket_server = server
+    return server
+
+
+def shutdown_socket_server():
+    global _socket_server
+    if _socket_server is not None:
+        _socket_server.stop()
+        _socket_server = None
+    os.environ.pop(DB_SOCKET_ENV, None)
+
+
+def _handle_request(mycli, request):
+    req = json.loads(request)
+    try:
+        csv_text = _run_action(mycli, req)
+        return json.dumps({"ok": True}).encode() + b"\n" + csv_text.encode()
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}).encode() + b"\n"
+
+
+def _run_action(mycli, req):
+    action = req["action"]
+    cur = mycli.sqlexecute.conn.cursor()
+
+    if action in ("drill_up", "drill_down"):
+        table = _last_tabular_command_table
+        if not table:
+            raise RuntimeError("No active table context to drill from")
+        arg = f"{table} {req['id']}"
+        results = drill_up(cur, arg=arg) if action == "drill_up" else drill_down(cur, arg=arg)
+    elif action == "open_table":
+        table = req["table"]
+        if _last_schema and "." not in table:
+            table = f"{_last_schema}.{table}"
+        results = drill_one(cur, arg=f"{table} {req['id']}")
+    else:
+        raise RuntimeError(f"Unknown action: {action}")
+
+    return _results_to_csv(results)
 
 
 @special_command(
