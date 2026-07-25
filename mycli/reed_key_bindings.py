@@ -1,11 +1,16 @@
 import os
 import logging
 import subprocess
+from urllib.parse import quote
 
 _logger = logging.getLogger(__name__)
 
 
 def add_custom_key_bindings(kb, mycli):
+    # <C-o> alone is a prefix of these upstream chords, so prompt_toolkit would stall
+    # for its 1s timeoutlen on every press waiting to see if a second key follows.
+    for chord in [("c-o", "d"), ("c-o", "c-d"), ("c-o", "t"), ("c-o", "c-t")]:
+        kb.remove(*chord)
 
     @kb.add("c-e")
     def _(event):
@@ -36,6 +41,30 @@ def add_custom_key_bindings(kb, mycli):
         buff = event.app.current_buffer
         buff.text = f"use {schema};"
         buff.validate_and_handle()
+
+    @kb.add("c-o")
+    def _(_event):
+        """Open the current connection in vdsql"""
+        _logger.debug("Detected <C-o> key.")
+        launch_vdsql(mycli)
+
+
+def launch_vdsql(mycli):
+    subprocess.Popen(
+        ["kitty", "@", "launch", "--type=overlay", "vdsql", build_vdsql_url(mycli.sqlexecute)],
+        stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def build_vdsql_url(sqlexecute):
+    user = quote(sqlexecute.user or "", safe="")
+    password = quote(sqlexecute.password or "", safe="")
+    host = sqlexecute.host or "127.0.0.1"
+    port = sqlexecute.port or 3306
+    dbname = sqlexecute.dbname or ""
+    return f"mysql://{user}:{password}@{host}:{port}/{dbname}"
 
 
 def custom_sort_schemas(schemas):

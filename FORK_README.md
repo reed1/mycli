@@ -60,6 +60,9 @@ Commands for working with tables that have parent-child relationships (using `id
   - Custom sorting: alphabetical for letters, reverse numerical for digits (recent years first)
   - Persists last selected schema to `~/.cache/rlocal/db/{DBCONFIG_ID}.last_schema`
   - Auto-generates and executes schema switch statement
+- **`Ctrl-O`** - Open the current connection in `vdsql` in a floating kitty overlay
+  - Connection URL is built from the live connection, so it follows the schema selected via `Ctrl-B`
+  - Removes the upstream `Ctrl-O` chords (`C-o d`, `C-o C-d`, `C-o t`, `C-o C-t` — server date/datetime insertion) so the binding fires instantly instead of waiting out prompt_toolkit's 1s chord timeout
 
 ### Safety Features
 
