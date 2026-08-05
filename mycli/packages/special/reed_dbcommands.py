@@ -634,7 +634,7 @@ def show_create_table(cur, arg=None, **_):
     with open("/tmp/sct_query.sql", "w") as f:
         f.write(content)
     subprocess.run(
-        ["kitty", "@", "launch", "--type=overlay", "show-sql", "/tmp/sct_query.sql"],
+        ["kitty", "@", "launch", "--type=overlay", "show-sql", "-l", "mysql", "/tmp/sct_query.sql"],
         check=True,
         stderr=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
